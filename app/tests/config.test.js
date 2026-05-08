@@ -5,6 +5,7 @@ const { deepMerge, DEFAULT_CONFIG } = require("../../config/index");
 const { SETTINGS_OPTIONS } = require("../shared/settings-options");
 const { runMigrations } = require("../../config/migrate");
 const { RuntimeManager } = require("../frontend/runtime-manager");
+const { createVoicePreviewService } = require("../frontend/main/voice-previews");
 const {
   DEFAULT_WS_URL,
   buildHeaders: buildChatGptOauthWsHeaders,
@@ -23,6 +24,23 @@ const {
 const ROOT = path.resolve(__dirname, "..", "..");
 const TEST_RESULTS_ROOT = path.join(ROOT, "app", "tests", "test-results");
 fs.mkdirSync(TEST_RESULTS_ROOT, { recursive: true });
+
+{
+  const previewsDir = fs.mkdtempSync(path.join(TEST_RESULTS_ROOT, "oc-voice-previews-"));
+  fs.writeFileSync(path.join(previewsDir, "af_nova.wav"), "placeholder", "utf8");
+  const service = createVoicePreviewService({
+    projectRoot: ROOT,
+    runtimePaths: {
+      VOICE_PREVIEWS_DIR: previewsDir,
+      IS_PACKAGED: false,
+      BACKEND_GENERATE_PREVIEW_ENTRY: path.join(ROOT, "app", "backend", "generate_voice_preview.py"),
+    },
+    buildPythonSubprocessEnv: () => ({ pythonCommand: "python", env: process.env }),
+  });
+  const url = service.getPreviewUrl("af_nova");
+  assert.ok(url.startsWith("file:///"), url);
+  assert.ok(!url.startsWith("file://D:"), url);
+}
 
 const partial = { brain: { model: "gpt-4o" } };
 const merged = deepMerge(DEFAULT_CONFIG, partial);

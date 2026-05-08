@@ -56,11 +56,16 @@ python app/tests/integration/test_tools.py
 node --check app/scripts/capture-readme-gif.js
 npx playwright test app/tests/ui/settings-ui.spec.js --list
 npm run test:settings-ui -- --output app/tests/test-results-playwright-reminder-clean
+node --check app/frontend/settings-preload.js
+node --check app/frontend/settings-renderer.js
+node --check app/frontend/main/voice-previews.js
+node app/tests/config.test.js
+npm run test:settings-ui -- --output app/tests/test-results-playwright-audio-preview-fix3
 ```
 
 The latest `npm run pack:win` produced `release/win-unpacked/OpenCompanion.exe`; its associated Windows icon was extracted to `build/opencompanion-exe-icon-final.png` and visually verified as the OpenCompanion logo.
 
-The latest reminder cleanup removed stale local OpenCompanion temp profiles and ignored Playwright result folders. `npm run test:settings-ui -- --output app/tests/test-results-playwright-reminder-clean` still fails at the pre-existing audio preview assertion where `af_nova` remains `Listen` instead of changing to `Playing`; no reminder scheduler noise or stale reminder events were observed before that failure.
+The latest reminder cleanup removed stale local OpenCompanion temp profiles and ignored Playwright result folders. The follow-up audio-preview fix made Windows file preview URLs use `pathToFileURL`, simulates preview duration in Electron test mode when audio output is unavailable, and preserves expanded voice groups across the async preview refresh. `npm run test:settings-ui -- --output app/tests/test-results-playwright-audio-preview-fix3` passes 10/10.
 
 When running new verification, record the exact commands and whether they passed.
 

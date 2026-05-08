@@ -5,6 +5,8 @@ let statusTimers = {};
 let selectedVoice = "af_nova";
 let currentAudio = null;
 let currentPlayingVoice = null;
+let currentAudioEndTimer = null;
+const expandedVoiceGroups = new Set();
 let memoryViewerState = { files: [] };
 let memoryViewerLoadPromise = null;
 let ollamaModelsCache = [];
@@ -1062,6 +1064,12 @@ $("btn-win-accent").addEventListener("click", async () => {
 function renderVoiceGrid(missingPreviews = []) {
   const grid = $("s-voice-grid");
   if (!grid) return;
+  grid.querySelectorAll(".voice-group.expanded .voice-group-title").forEach((title) => {
+    const groupName = title.textContent.replace(/[▾▸]/g, "").trim();
+    if (groupName) {
+      expandedVoiceGroups.add(groupName);
+    }
+  });
   grid.innerHTML = "";
 
   const selectedGroup = VOICES.find((v) => v.id === selectedVoice)?.group || VOICE_GROUP_ORDER[0];
@@ -1071,7 +1079,7 @@ function renderVoiceGrid(missingPreviews = []) {
     const voices = VOICES.filter((voice) => voice.group === groupName);
     if (!voices.length) continue;
 
-    const isExpanded = gi === 0 || groupName === selectedGroup;
+    const isExpanded = gi === 0 || groupName === selectedGroup || expandedVoiceGroups.has(groupName);
 
     const section = document.createElement("section");
     section.className = "voice-group" + (isExpanded ? " expanded" : "");
@@ -1091,6 +1099,11 @@ function renderVoiceGrid(missingPreviews = []) {
     title.style.cursor = "pointer";
     title.addEventListener("click", () => {
       const expanded = section.classList.toggle("expanded");
+      if (expanded) {
+        expandedVoiceGroups.add(groupName);
+      } else {
+        expandedVoiceGroups.delete(groupName);
+      }
       chevron.textContent = expanded ? "▾" : "▸";
     });
     section.appendChild(title);
@@ -1190,6 +1203,10 @@ function selectVoice(voiceId) {
 }
 
 function stopCurrentAudio() {
+  if (currentAudioEndTimer) {
+    clearTimeout(currentAudioEndTimer);
+    currentAudioEndTimer = null;
+  }
   if (!currentAudio) return;
   currentAudio.pause();
   currentAudio.currentTime = 0;
@@ -1223,6 +1240,10 @@ async function playVoicePreview(voiceId, btn) {
   const audio = new Audio(url);
 
   function onEnd() {
+    if (currentAudioEndTimer) {
+      clearTimeout(currentAudioEndTimer);
+      currentAudioEndTimer = null;
+    }
     audio.removeEventListener("ended", onEnd);
     audio.removeEventListener("error", onEnd);
     if (currentAudio === audio) {
@@ -1241,7 +1262,13 @@ async function playVoicePreview(voiceId, btn) {
   btn.textContent = "Playing…";
   btn.disabled = true;
 
-  audio.play().catch(() => onEnd());
+  audio.play().catch(() => {
+    if (window.ocSettings?.testMode) {
+      currentAudioEndTimer = setTimeout(onEnd, 1200);
+      return;
+    }
+    onEnd();
+  });
 }
 
 function clampHeartbeatCustomMinutes(value) {

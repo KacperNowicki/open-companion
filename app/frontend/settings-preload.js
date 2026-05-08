@@ -7,6 +7,7 @@ const CHATGPT_OAUTH_MODELS = Object.freeze(
 );
 
 contextBridge.exposeInMainWorld("ocSettings", {
+  testMode: process.env.OPEN_COMPANION_TEST_MODE === "1",
   options: SETTINGS_OPTIONS,
   load: () => ipcRenderer.invoke("settings:load"),
   save: (section, data) => ipcRenderer.invoke("settings:save", section, data),

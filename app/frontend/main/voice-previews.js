@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { pathToFileURL } = require("url");
 
 const VOICE_NAMES = [
   "af_alloy",
@@ -54,7 +55,7 @@ function createVoicePreviewService({ projectRoot, runtimePaths, buildPythonSubpr
     return missing;
   }
 
-  async function getPreviewUrl(voice) {
+  function getPreviewUrl(voice) {
     if (!isKnownVoice(voice)) {
       return null;
     }
@@ -62,7 +63,7 @@ function createVoicePreviewService({ projectRoot, runtimePaths, buildPythonSubpr
     if (!fs.existsSync(previewPath)) {
       return null;
     }
-    return `file://${previewPath.replace(/\\/g, "/")}`;
+    return pathToFileURL(previewPath).href;
   }
 
   async function generatePreview(voice) {
