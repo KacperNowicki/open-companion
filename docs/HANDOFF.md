@@ -25,6 +25,7 @@ Use `docs/ARCHITECTURE.md` for durable runtime/config/safety decisions. Use this
 - Test-mode backend launches do not start the reminder scheduler unless `OPEN_COMPANION_TEST_ENABLE_SCHEDULER=1` is set.
 - README GIF capture and settings UI test profiles seed TTS/STT off to avoid audible reminder or speech leaks.
 - Test-mode backend launches and later config reloads do not start the reminder scheduler unless `OPEN_COMPANION_TEST_ENABLE_SCHEDULER=1` is set.
+- Test profile seeders write quiet reminder files, and scheduler markdown ignores HTML comments so starter examples cannot fire as reminders.
 - README uses `docs/opencompanion-github.png`; the app shell uses `app/frontend/assets/brand/icon.png` rendered from the final `docs/opencompanion_logo.svg` for the main overlay, settings, onboarding, and Electron window icons.
 - Windows packaging uses `app/frontend/assets/brand/icon.ico`, the runtime sets AppUserModelID `com.opencompanion.app`, and `app/scripts/electron-builder-after-pack.js` stamps the unpacked executable with `rcedit.exe` so taskbar/shortcut identity does not fall back to Electron.
 - Keep `signAndEditExecutable: false` unless the Windows build environment can extract `winCodeSign`; the default electron-builder resource-edit path failed on this machine because the current user cannot create the symlinks in the `winCodeSign` package.
@@ -50,9 +51,16 @@ node --check app/frontend/main.js
 node --check app/scripts/electron-builder-after-pack.js
 node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package ok')"
 git diff --check
+python -m py_compile app/backend/scheduler.py app/backend/wrapper_scheduler.py app/tests/companion/conftest.py
+python app/tests/integration/test_tools.py
+node --check app/scripts/capture-readme-gif.js
+npx playwright test app/tests/ui/settings-ui.spec.js --list
+npm run test:settings-ui -- --output app/tests/test-results-playwright-reminder-clean
 ```
 
 The latest `npm run pack:win` produced `release/win-unpacked/OpenCompanion.exe`; its associated Windows icon was extracted to `build/opencompanion-exe-icon-final.png` and visually verified as the OpenCompanion logo.
+
+The latest reminder cleanup removed stale local OpenCompanion temp profiles and ignored Playwright result folders. `npm run test:settings-ui -- --output app/tests/test-results-playwright-reminder-clean` still fails at the pre-existing audio preview assertion where `af_nova` remains `Listen` instead of changing to `Playing`; no reminder scheduler noise or stale reminder events were observed before that failure.
 
 When running new verification, record the exact commands and whether they passed.
 

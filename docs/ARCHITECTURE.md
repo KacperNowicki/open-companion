@@ -63,6 +63,8 @@ When a default changes in one side, check the other side before committing.
 
 Electron and backend tests run with `OPEN_COMPANION_TEST_MODE=1`. In that mode, the reminder scheduler must stay disabled through both startup and config reloads unless a test explicitly opts in with `OPEN_COMPANION_TEST_ENABLE_SCHEDULER=1`. This keeps UI and capture profiles quiet and prevents stale local schedules from leaking into automated runs.
 
+Test profile seeders should write an empty `companion/schedule.md`, empty `companion/memory/schedule_state.json`, and empty `companion/vault/todo.md` unless a test is explicitly covering reminders. The scheduler parser also ignores lines inside HTML comments, so starter markdown examples cannot become real reminders.
+
 ## Tool And Host Safety
 
 OpenCompanion should not grow unrestricted host control by accident.

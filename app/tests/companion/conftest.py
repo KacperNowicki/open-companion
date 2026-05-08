@@ -243,6 +243,16 @@ def _prepare_profile(profile_root: Path, config: dict, wipe: bool = False) -> No
         _write_json(profile_root / "config.json", config)
     (profile_root / "companion" / "memory").mkdir(parents=True, exist_ok=True)
     (profile_root / "companion" / "soul" / "active").mkdir(parents=True, exist_ok=True)
+    (profile_root / "companion" / "vault").mkdir(parents=True, exist_ok=True)
+    if profile_root.resolve() != ROOT.resolve() or wipe:
+        (profile_root / "companion" / "schedule.md").write_text(
+            "# Schedule\n\nAdd recurring reminders below. The companion can help you add entries.\n",
+            encoding="utf-8",
+        )
+        _write_json(profile_root / "companion" / "memory" / "schedule_state.json", {})
+        todo_path = profile_root / "companion" / "vault" / "todo.md"
+        if not todo_path.exists():
+            todo_path.write_text("# Todo\n", encoding="utf-8")
 
 
 def wait_until(predicate, timeout: int = DEFAULT_TIMEOUT, interval: float = 0.25) -> bool:

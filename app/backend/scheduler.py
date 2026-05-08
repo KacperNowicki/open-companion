@@ -31,9 +31,9 @@ Add recurring reminders below. The companion can help you add entries.
 
 <!-- Format: - [ ] Description | every PATTERN HH:MM -->
 <!-- Examples:
-- [ ] Weekly review | every Monday 09:00
-- [ ] Birthday reminder | every year on Apr 21 10:00
-- [ ] Quarterly tax payment | every 3 months on the 1st 09:00
+- Weekly review: every Monday 09:00
+- Birthday reminder: every year on Apr 21 10:00
+- Quarterly tax payment: every 3 months on the 1st 09:00
 -->
 """
 
@@ -729,7 +729,15 @@ def _todo_reminders(state: dict[str, dict]) -> list[Reminder]:
 def _schedule_reminders() -> list[Reminder]:
     _ensure_schedule_file()
     reminders: list[Reminder] = []
+    in_html_comment = False
     for index, line in enumerate(SCHEDULE_PATH.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if "<!--" in stripped:
+            in_html_comment = True
+        if in_html_comment:
+            if "-->" in stripped:
+                in_html_comment = False
+            continue
         match = _SCHEDULE_REMINDER_RE.match(line)
         if not match:
             continue

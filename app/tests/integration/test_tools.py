@@ -186,6 +186,29 @@ def test_recurring_reminder_tool_supports_partial_and_complete_turns() -> None:
     ok(name)
 
 
+def test_starter_schedule_examples_do_not_create_reminders() -> None:
+    name = "tools: starter schedule examples are inert"
+    temp = _temp_dir()
+    original_schedule_path = scheduler_tools.scheduler.SCHEDULE_PATH
+    try:
+        scheduler_tools.scheduler.SCHEDULE_PATH = temp / "schedule.md"
+        scheduler_tools.scheduler.SCHEDULE_PATH.write_text(
+            scheduler_tools.scheduler.STARTER_SCHEDULE_MD,
+            encoding="utf-8",
+        )
+        assert scheduler_tools.scheduler._schedule_reminders() == []
+        scheduler_tools.scheduler.SCHEDULE_PATH.write_text(
+            "# Schedule\n\n<!--\n- [ ] Commented example | every Monday 09:00\n-->\n\n- [ ] Real reminder | every Tuesday 10:00\n",
+            encoding="utf-8",
+        )
+        reminders = scheduler_tools.scheduler._schedule_reminders()
+        assert [reminder.text for reminder in reminders] == ["Real reminder"]
+    finally:
+        scheduler_tools.scheduler.SCHEDULE_PATH = original_schedule_path
+        shutil.rmtree(temp, ignore_errors=True)
+    ok(name)
+
+
 def test_error_paths() -> None:
     name = "tools: core tool error paths stay user-friendly"
     with _tool_patch_stack():
@@ -234,6 +257,7 @@ def run_all() -> bool:
         test_happy_paths,
         test_reminder_tool_supports_partial_and_complete_turns,
         test_recurring_reminder_tool_supports_partial_and_complete_turns,
+        test_starter_schedule_examples_do_not_create_reminders,
         test_error_paths,
         test_confirmation_gates_for_windows_terminal_only,
         test_behavioral_assignment_selector_supports_focused_runs,

@@ -121,6 +121,23 @@ function writeJson(filePath, data) {
 
 }
 
+function writeQuietReminderState(rootDir) {
+
+  const companionDir = path.join(rootDir, 'companion');
+  const memoryDir = path.join(companionDir, 'memory');
+  const vaultDir = path.join(companionDir, 'vault');
+  fs.mkdirSync(memoryDir, { recursive: true });
+  fs.mkdirSync(vaultDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(companionDir, 'schedule.md'),
+    '# Schedule\n\nAdd recurring reminders below. The companion can help you add entries.\n',
+    'utf8'
+  );
+  writeJson(path.join(memoryDir, 'schedule_state.json'), {});
+  fs.writeFileSync(path.join(vaultDir, 'todo.md'), '# Todo\n', 'utf8');
+
+}
+
 
 
 function configPath() {
@@ -390,6 +407,7 @@ function seedProfile(rootDir) {
   fs.mkdirSync(path.join(rootDir, 'companion', 'memory'), { recursive: true });
 
   fs.writeFileSync(path.join(rootDir, 'companion', 'memory', 'memory.md'), '# Memory\n\n- likes concise updates\n- uses dark mode\n- asks for direct tradeoffs\n- wants verification before sign-off\n', 'utf8');
+  writeQuietReminderState(rootDir);
 
   fs.mkdirSync(path.join(rootDir, 'runtime-assets', 'kokoro'), { recursive: true });
   fs.writeFileSync(path.join(rootDir, 'runtime-assets', 'kokoro', 'kokoro-v1.0.onnx'), 'test-kokoro-model', 'utf8');

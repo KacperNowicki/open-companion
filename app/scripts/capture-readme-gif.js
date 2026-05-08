@@ -16,6 +16,21 @@ function writeJson(filePath, data) {
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
+function writeQuietReminderState(profileRoot) {
+  const companionDir = path.join(profileRoot, "companion");
+  const memoryDir = path.join(companionDir, "memory");
+  const vaultDir = path.join(companionDir, "vault");
+  fs.mkdirSync(memoryDir, { recursive: true });
+  fs.mkdirSync(vaultDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(companionDir, "schedule.md"),
+    "# Schedule\n\nAdd recurring reminders below. The companion can help you add entries.\n",
+    "utf8"
+  );
+  writeJson(path.join(memoryDir, "schedule_state.json"), {});
+  fs.writeFileSync(path.join(vaultDir, "todo.md"), "# Todo\n", "utf8");
+}
+
 function cloneConfig() {
   return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 }
@@ -75,6 +90,7 @@ function seedProfile(profileRoot) {
       },
     },
   });
+  writeQuietReminderState(profileRoot);
 }
 
 async function waitForWindow(app, titlePattern, timeout = 20000) {
