@@ -1,0 +1,1 @@
+"""OpenCompanion backend package."""

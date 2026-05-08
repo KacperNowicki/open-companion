@@ -1,0 +1,9 @@
+﻿{
+  "brain": {
+    "model": "qwen2.5:14b",
+    "provider": "ollama"
+  },
+  "memory": {
+    "write_back_enabled": true
+  }
+}

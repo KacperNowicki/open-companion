@@ -1,0 +1,83 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+config.local.json
+
+# Runtime profile data
+companion/memory/*
+!companion/memory/.gitkeep
+companion/soul/active/*
+!companion/soul/active/.gitkeep
+companion/assets/avatar/*
+!companion/assets/avatar/.gitkeep
+!companion/assets/avatar/default.glb
+companion/vault/
+
+# Build and installer output
+build/
+release/
+
+# Logs and local runtime state
+*.log
+logs/
+install-cache/
+runtime-assets/
+ollama-models/
+runtime-status.json
+migration-version.json
+build-windows.log
+release-v1/
+.oc-temp-tts-check/
+
+# Legacy / local dev fallbacks
+memory/
+
+# Python test/runtime caches
+.pytest-deps/
+.python-deps/
+.pytest_cache/
+.tmp-test-profiles/
+tests/companion/.tmp-profiles/
+tests/integration/.tmp/
+
+# Test artifacts and generated fixtures
+app/tests/.tmp-test-profiles/
+app/tests/companion/.tmp-profiles/
+app/tests/companion/.artifacts/
+app/tests/integration/.tmp/
+app/tests/integration/.tmp-memory/
+app/tests/test-results*/
+app/tests/old/
+test-results*/
+companion/skills/shared/auto_hot_skill_*.md
+skills/shared/auto_hot_skill_*.md
+
+# Local backend tool development
+app/backend/tools/custom/*.py
+app/backend/tools/custom/*.js
+app/backend/tools/custom/registry.json
+!app/backend/tools/custom/.gitkeep
+
+# Model binaries / local assets
+models/*.onnx
+models/*.bin
+models/*.wav
+
+# Private config
+config.json
+
+# Local AI agent context folders
+.codex/
+docs/.claude/
+docs/Gemma 4/
+
+# Misc local files
+.DS_Store
+.claude/
+.claude/settings.local.json
+.oc-temp-py/
+shareables/
+.codex-avatar-main.patch
+tmp_shutdown_probe.py

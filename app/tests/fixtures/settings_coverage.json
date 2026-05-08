@@ -1,0 +1,119 @@
+{
+  "sections": {
+    "persona": {
+      "persisted": [
+        "companion_name",
+        "pronouns",
+        "soul_identity",
+        "backstory",
+        "relationship",
+        "user_name",
+        "user_context"
+      ],
+      "actions": [
+        "save_regenerates_soul",
+        "save_triggers_config_reload",
+        "live_name_reload"
+      ]
+    },
+    "model": {
+      "persisted": [
+        "default_provider",
+        "default_model",
+        "companion_provider",
+        "companion_model",
+        "assistant_provider",
+        "assistant_model",
+        "temperature",
+        "max_tokens",
+        "companion_temperature",
+        "companion_max_tokens",
+        "assistant_temperature",
+        "assistant_max_tokens",
+        "context_window",
+        "stream",
+        "fallback_cpu"
+      ],
+      "actions": [
+        "openai_api_key_blur_save",
+        "anthropic_api_key_blur_save",
+        "custom_url_blur_save",
+        "gemini_provider_option",
+        "brain_provider_immediate_save",
+        "cloud_model_dropdown",
+        "custom_model_free_text",
+        "connection_test_button",
+        "save_triggers_config_reload",
+        "enriched_ollama_labels",
+        "status_card",
+        "context_window_warning",
+        "pull_model_progress",
+        "pull_model_cancel",
+        "delete_model"
+      ]
+    },
+    "memory": {
+      "persisted": [
+        "write_back_enabled",
+        "embedding_enabled",
+        "max_context_memories",
+        "extraction_source",
+        "extraction_provider",
+        "extraction_base_url",
+        "extraction_model",
+        "dream_enabled",
+        "dream_schedule",
+        "max_entries"
+      ],
+      "actions": [
+        "viewer_refresh",
+        "viewer_delete_entry",
+        "dream_now",
+        "reset_memory_confirmation",
+        "reset_memory_now",
+        "save_triggers_config_reload"
+      ]
+    },
+    "heartbeat": {
+      "persisted": [
+        "heartbeat_enabled",
+        "heartbeat_interval",
+        "only_when_idle",
+        "idle_threshold_minutes"
+      ],
+      "actions": []
+    },
+    "audio": {
+      "persisted": [
+        "tts_enabled",
+        "kokoro_voice",
+        "volume",
+        "tts_speed",
+        "stt_enabled",
+        "whisper_model",
+        "push_to_talk_key",
+        "auto_send_on_silence"
+      ],
+      "actions": [
+        "voice_preview_listen_stop",
+        "save_live_reload"
+      ]
+    },
+    "themes": {
+      "persisted": [
+        "mode",
+        "accent_rgb",
+        "layer_visibility"
+      ],
+      "actions": [
+        "preset_chip",
+        "windows_accent",
+        "live_apply"
+      ]
+    },
+    "shell": {
+      "persisted": [],
+      "actions": []
+    }
+  }
+}

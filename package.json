@@ -1,0 +1,129 @@
+{
+    "name": "open-companion",
+    "productName": "OpenCompanion",
+    "version": "1.0.0",
+    "description": "Local-first desktop AI companion shell",
+    "license": "MIT",
+    "main": "app/frontend/main.js",
+    "scripts": {
+        "start": "electron .",
+        "clean:artifacts": "node app/scripts/clean-artifacts.js",
+        "clean:artifacts:dry-run": "node app/scripts/clean-artifacts.js --dry-run",
+        "clean:artifacts:list": "node app/scripts/clean-artifacts.js --list",
+        "clean:runtime-assets": "node app/scripts/clean-artifacts.js runtime-assets",
+        "generate-voices": "node app/scripts/generate-voices.js",
+        "generate-voices:force": "node app/scripts/generate-voices.js --force",
+        "generate-notices": "node app/scripts/generate-node-license-notice.js",
+        "capture-readme-gif": "node app/scripts/capture-readme-gif.js",
+        "build:backend:win": "node app/scripts/build-backend.js",
+        "build:voice-previews": "node app/scripts/generate-voices.js",
+        "pack:win:clean": "npm run clean:artifacts && node app/scripts/build-windows.js --dir --publish never",
+        "pack:win": "node app/scripts/build-windows.js --dir --publish never",
+        "dist:win:clean": "npm run clean:artifacts && node app/scripts/build-windows.js --publish onTagOrDraft",
+        "dist:win": "node app/scripts/build-windows.js --publish onTagOrDraft",
+        "test": "node app/tests/config.test.js && node app/tests/test_migration.js && python app/tests/test_config.py",
+        "test:config": "node app/tests/config.test.js",
+        "test:config:py": "python app/tests/test_config.py",
+        "test:e2e": "python app/tests/test_suite.py",
+        "test:updater": "node app/tests/test_updater_smoke.js",
+        "test:settings-ui": "playwright test --config app/tests/playwright.config.js app/tests/ui/settings-ui.spec.js",
+        "test:scene": "playwright test --config app/tests/playwright.config.js app/tests/ui/scene-controls.spec.js",
+        "test:all": "node app/tests/config.test.js && node app/tests/test_migration.js && python app/tests/test_config.py && python app/tests/test_suite.py",
+        "test:integration": "node app/tests/integration/run.js",
+        "test:companion": "python app/tests/companion/run.py",
+        "test:full": "npm run test:all && npm run test:integration && npm run test:companion"
+    },
+    "dependencies": {
+        "@met4citizen/talkinghead": "^1.7.0",
+        "electron-updater": "^6.6.2",
+        "keytar": "^7.9.0",
+        "three": "^0.180.0",
+        "ws": "^8.20.0"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.54.2",
+        "electron": "^42.0.0",
+        "electron-builder": "^26.8.1",
+        "playwright": "^1.54.2"
+    },
+    "build": {
+        "appId": "com.opencompanion.app",
+        "productName": "OpenCompanion",
+        "directories": {
+            "output": "release"
+        },
+        "beforePack": "app/scripts/electron-builder-before-pack.js",
+        "afterPack": "app/scripts/electron-builder-after-pack.js",
+        "files": [
+            "app/**/*",
+            "config/**/*",
+            "package.json",
+            "LICENSE",
+            "THIRD_PARTY_NOTICES.md",
+            "THIRD_PARTY_NODE_DEPENDENCIES.md",
+            "app/scripts/updater.js",
+            "!companion/vault/**",
+            "!companion/memory/**",
+            "!companion/soul/active/**",
+            "!app/tests/**",
+            "!docs/**",
+            "!build/backend-work/**",
+            "!build/backend-spec/**",
+            "!*.wsb"
+        ],
+        "extraResources": [
+            {
+                "from": "build/backend",
+                "to": "open-companion-runtime/backend"
+            },
+            {
+                "from": "companion/assets/voices",
+                "to": "open-companion-runtime/project/companion/assets/voices"
+            },
+            {
+                "from": "companion/assets/avatar",
+                "to": "open-companion-runtime/project/companion/assets/avatar"
+            },
+            {
+                "from": "companion/soul",
+                "to": "open-companion-runtime/project/companion/soul",
+                "filter": [
+                    "**/*",
+                    "!active/**"
+                ]
+            },
+            {
+                "from": "companion/skills",
+                "to": "open-companion-runtime/project/companion/skills"
+            },
+            {
+                "from": "companion/memory",
+                "to": "open-companion-runtime/project/companion/memory"
+            },
+            {
+                "from": "companion/vault",
+                "to": "open-companion-runtime/project/companion/vault"
+            },
+            {
+                "from": "app/backend/tools/registry.json",
+                "to": "open-companion-runtime/project/app/backend/tools/registry.json"
+            }
+        ],
+        "win": {
+            "target": [
+                "nsis"
+            ],
+            "icon": "app/frontend/assets/brand/icon.ico",
+            "signAndEditExecutable": false,
+            "artifactName": "OpenCompanion-Setup-${version}-${arch}.${ext}"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "perMachine": false,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "OpenCompanion"
+        }
+    }
+}

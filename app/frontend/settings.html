@@ -1,0 +1,2418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>OpenCompanion â€" Settings</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&display=swap');
+
+    :root {
+      --oc-bg: #0a0714;
+      --oc-bg-grad-a: #100c1e;
+      --oc-bg-grad-b: #090714;
+      --oc-bg-grad-c: #050410;
+      --oc-surface: rgba(var(--oc-accent-rgb), 0.08);
+      --oc-surface2: rgba(var(--oc-accent-rgb), 0.12);
+      --oc-surface3: rgba(var(--oc-accent-rgb), 0.18);
+      --oc-border: rgba(var(--oc-accent-rgb), 0.18);
+      --oc-text: #f2f2f5;
+      --oc-muted: rgba(242,242,245,0.55);
+      --oc-dim: #b8b4c8;
+      --oc-accent: #a855f7;
+      --oc-accent-rgb: 168, 85, 247;
+      --oc-control-track: rgba(255,255,255,0.14);
+      --oc-select-option-bg: #120e22;
+      --oc-radius: 10px;
+      --font-display: "Cinzel", "Trajan Pro", "Times New Roman", serif;
+      --font-ui: "Crimson Pro", "Georgia", "Times New Roman", serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 65% 0%, rgba(var(--oc-accent-rgb), 0.14) 0%, transparent 50%),
+        radial-gradient(ellipse at 10% 100%, rgba(var(--oc-accent-rgb), 0.07) 0%, transparent 45%),
+        linear-gradient(160deg, var(--oc-bg-grad-a) 0%, var(--oc-bg-grad-b) 60%, var(--oc-bg-grad-c) 100%);
+      color: var(--oc-text);
+      font-family: var(--font-ui);
+      font-size: 16px;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* â"€â"€ Titlebar â"€â"€ */
+    .s-titlebar {
+      -webkit-app-region: drag;
+      height: 32px;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px 0 16px;
+      background: var(--oc-surface);
+      border-bottom: 1px solid var(--oc-border);
+    }
+    .s-titlebar-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 12px;
+      font-family: var(--font-display);
+      color: var(--oc-text);
+      letter-spacing: 0.16em;
+    }
+    .s-titlebar-icon {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 0 8px rgba(var(--oc-accent-rgb), 0.25));
+    }
+    .s-titlebar-text { white-space: nowrap; }
+    .s-titlebar-bold { font-weight: 700; }
+    .s-titlebar-normal { font-weight: 400; opacity: 0.72; }
+    .s-close-btn {
+      -webkit-app-region: no-drag;
+      border: none;
+      background: transparent;
+      color: var(--oc-muted);
+      font-size: 18px;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .s-close-btn:hover {
+      background: rgba(255,80,80,0.2);
+      color: #ff6060;
+    }
+
+    /* â"€â"€ Layout â"€â"€ */
+    .oc-wrap {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .oc-sidebar {
+      width: 172px;
+      background: rgba(var(--oc-accent-rgb), 0.03);
+      border-right: 1px solid var(--oc-border);
+      padding: 16px 10px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .oc-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      color: var(--oc-muted);
+      padding: 4px 10px 14px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .oc-logo-icon {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 0 10px rgba(var(--oc-accent-rgb), 0.26));
+    }
+    .oc-logo-text {
+      min-width: 0;
+      line-height: 1.15;
+    }
+
+    .oc-nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: var(--oc-muted);
+      cursor: pointer;
+      font-size: 15px;
+      font-family: var(--font-ui);
+      text-align: left;
+      width: 100%;
+      transition: background 0.15s, color 0.15s;
+    }
+    .oc-nav-btn:hover { background: rgba(255,255,255,0.05); color: var(--oc-text); }
+    .oc-nav-btn.active { background: rgba(var(--oc-accent-rgb),0.15); color: var(--oc-accent); }
+
+    .oc-nav-icon { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.85; }
+    .oc-nav-btn.active .oc-nav-icon { opacity: 1; }
+
+    .oc-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* â"€â"€ Cards & Rows â"€â"€ */
+    .oc-page { display: none; flex-direction: column; gap: 20px; }
+    .oc-page.active { display: flex; }
+
+    .oc-page-title { font-size: 20px; font-family: var(--font-display); font-weight: 600; letter-spacing: 0.04em; color: var(--oc-text); margin-bottom: 2px; }
+    .oc-page-sub { font-size: 15px; color: var(--oc-muted); }
+
+    .oc-section-title {
+      font-size: 12px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--oc-muted);
+      margin-bottom: 10px;
+    }
+
+    .oc-card {
+      background: var(--oc-surface);
+      border: 1px solid var(--oc-border);
+      border-radius: var(--oc-radius);
+      padding: 16px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .oc-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--oc-border);
+      gap: 12px;
+    }
+    .oc-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .oc-row:first-child { padding-top: 0; }
+
+    .oc-label { font-size: 16px; color: var(--oc-text); }
+    .oc-sublabel { font-size: 14px; color: var(--oc-dim); margin-top: 2px; }
+
+    /* â"€â"€ Toggle â"€â"€ */
+    .oc-toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .oc-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .oc-toggle-track {
+      position: absolute; inset: 0;
+      background: var(--oc-control-track);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .oc-toggle input:checked + .oc-toggle-track { background: var(--oc-accent); }
+    .oc-toggle-track::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px; left: 3px;
+      transition: transform 0.2s;
+    }
+    .oc-toggle input:checked + .oc-toggle-track::after { transform: translateX(16px); }
+
+    /* â"€â"€ Select â"€â"€ */
+    .oc-select {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      color: var(--oc-text);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 14px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      min-width: 120px;
+    }
+    .oc-select option {
+      background: var(--oc-select-option-bg);
+      color: var(--oc-text);
+    }
+
+    /* â"€â"€ Input â"€â"€ */
+    .oc-input {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      color: var(--oc-text);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 14px;
+      font-family: var(--font-ui);
+      width: 140px;
+    }
+    .oc-input:focus { outline: none; border-color: var(--oc-accent); }
+
+    /* â"€â"€ Textarea â"€â"€ */
+    .oc-textarea {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      color: var(--oc-text);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      line-height: 1.55;
+      font-family: var(--font-ui);
+      width: 100%;
+      resize: vertical;
+      min-height: 64px;
+    }
+    .oc-textarea:focus { outline: none; border-color: var(--oc-accent); }
+
+    /* â"€â"€ Slider â"€â"€ */
+    .oc-slider-wrap { display: flex; align-items: center; gap: 8px; }
+    .oc-slider {
+      -webkit-appearance: none;
+      height: 3px;
+      border-radius: 3px;
+      background: var(--oc-control-track);
+      width: 100px;
+      cursor: pointer;
+    }
+    .oc-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--oc-accent);
+      cursor: pointer;
+    }
+    .oc-slider-val { font-size: 12px; color: var(--oc-muted); min-width: 28px; text-align: right; }
+
+    /* â"€â"€ Save Bar â"€â"€ */
+    .save-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .settings-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 24px 12px;
+      color: var(--oc-muted);
+      font-size: 12px;
+    }
+    .settings-footer-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .settings-footer-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
+      text-align: right;
+    }
+    .settings-footer-left .s-status {
+      min-height: 16px;
+    }
+    .settings-footer-right .s-status {
+      min-height: 16px;
+    }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--oc-border);
+      color: var(--oc-muted);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .btn-ghost:hover { color: var(--oc-accent); border-color: rgba(212,175,55,0.4); }
+    .btn-accent {
+      background: var(--oc-accent);
+      border: none;
+      color: #1a1400;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-accent:hover { opacity: 0.9; }
+
+    .oc-btn,
+    .oc-btn-ghost {
+      background: transparent;
+      border: 1px solid var(--oc-border);
+      color: var(--oc-muted);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .oc-btn:hover,
+    .oc-btn-ghost:hover {
+      color: var(--oc-text);
+      border-color: rgba(212,175,55,0.4);
+    }
+    .oc-btn-primary {
+      background: var(--oc-accent);
+      border: none;
+      color: #1a1400;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .oc-btn-primary:hover { opacity: 0.9; }
+    .oc-card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-size: 10px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--oc-muted);
+    }
+    .oc-status {
+      font-size: 13px;
+      color: var(--oc-accent);
+      min-height: 18px;
+      transition: opacity 0.3s;
+    }
+    .oc-status.hidden { opacity: 0; }
+
+    /* â"€â"€ Sandbox tab â"€â"€ */
+    .sandbox-status-grid { display: flex; flex-direction: column; gap: 8px; }
+    .sandbox-status-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .sandbox-status-label { color: var(--oc-text); font-size: 14px; }
+    .sandbox-badge { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 20px; background: rgba(255,255,255,0.06); color: var(--oc-muted); }
+    .sandbox-badge.ok { background: rgba(80,200,120,0.15); color: #50c878; }
+    .sandbox-badge.fail { background: rgba(220,80,80,0.15); color: #dc5050; }
+    .sandbox-action-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .sandbox-output { background: rgba(0,0,0,0.35); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.5; color: var(--oc-muted); white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin-top: 4px; }
+    .sandbox-output.hidden { display: none; }
+
+    /* â"€â"€ Tag chips â"€â"€ */
+    .tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .tag {
+      background: rgba(var(--oc-accent-rgb),0.15);
+      border: 1px solid rgba(var(--oc-accent-rgb),0.4);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: var(--oc-accent);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .tag-remove {
+      cursor: pointer;
+      opacity: 0.6;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .tag-remove:hover { opacity: 1; }
+    .tag-add-input {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      color: var(--oc-text);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-family: var(--font-ui);
+      width: 90px;
+    }
+    .tag-add-input:focus { outline: none; border-color: var(--oc-accent); }
+    .tag-add-btn {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      color: var(--oc-muted);
+      cursor: pointer;
+      font-family: var(--font-ui);
+    }
+    .tag-add-btn:hover { color: var(--oc-text); border-color: rgba(255,255,255,0.2); }
+
+    /* â"€â"€ Themes â"€â"€ */
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .theme-chip {
+      border-radius: 8px;
+      padding: 10px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      background: var(--oc-surface2);
+      transition: border-color 0.15s;
+    }
+    .theme-chip.selected { border-color: var(--oc-accent); }
+    .theme-chip-preview {
+      height: 28px;
+      border-radius: 5px;
+      display: flex;
+      gap: 3px;
+      padding: 5px;
+      align-items: center;
+    }
+    .theme-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .theme-chip-name { font-size: 11px; color: var(--oc-muted); text-align: center; }
+
+    .color-picker-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .rgb-input-group { display: flex; align-items: center; gap: 4px; }
+    .rgb-label { font-size: 10px; color: var(--oc-muted); width: 10px; }
+    .rgb-val {
+      width: 44px;
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      color: var(--oc-text);
+      border-radius: 5px;
+      padding: 4px 6px;
+      font-size: 12px;
+      font-family: var(--font-ui);
+      text-align: center;
+    }
+    .rgb-val:focus { outline: none; border-color: var(--oc-accent); }
+
+    .accent-preview {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 2px solid var(--oc-border);
+      flex-shrink: 0;
+      transition: background 0.1s;
+    }
+
+    .win-accent-btn {
+      background: rgba(var(--oc-accent-rgb),0.15);
+      border: 1px solid rgba(var(--oc-accent-rgb),0.3);
+      color: var(--oc-accent);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .win-accent-btn:hover { background: rgba(var(--oc-accent-rgb),0.25); }
+
+    .base-mode-row { display: flex; gap: 10px; }
+    .base-mode-btn {
+      flex: 1;
+      padding: 14px 0;
+      border-radius: 8px;
+      border: 2px solid var(--oc-border);
+      font-size: 12px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .base-mode-btn.selected { border-color: var(--oc-accent); }
+
+    /* â"€â"€ Voice card grid â"€â"€ */
+    .voice-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 8px;
+    }
+    .voice-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .voice-group-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--oc-muted);
+      padding-left: 2px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      user-select: none;
+    }
+    .voice-group-chevron {
+      font-size: 10px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+    .voice-group-grid {
+      display: none;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .voice-group.expanded .voice-group-grid {
+      display: grid;
+    }
+    .voice-card {
+      background: var(--oc-surface2);
+      border: 2px solid var(--oc-border);
+      border-radius: 8px;
+      padding: 10px 8px 8px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .voice-card:hover { border-color: rgba(var(--oc-accent-rgb), 0.4); }
+    .voice-card.selected { border-color: var(--oc-accent); background: rgba(var(--oc-accent-rgb), 0.08); }
+    .voice-card-name { font-size: 12px; font-weight: 500; color: var(--oc-text); }
+    .voice-card-tag { font-size: 10px; color: var(--oc-muted); }
+    .voice-card-listen {
+      margin-top: 4px;
+      background: rgba(var(--oc-accent-rgb), 0.15);
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.3);
+      color: var(--oc-accent);
+      border-radius: 5px;
+      padding: 3px 0;
+      font-size: 10px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.12s;
+    }
+    .voice-card-listen:hover { background: rgba(var(--oc-accent-rgb), 0.28); }
+    .voice-card-listen:disabled { opacity: 0.45; cursor: not-allowed; }
+    .voice-card-spinner {
+      margin-top: 4px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--oc-muted);
+      font-size: 10px;
+      gap: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-icon {
+      width: 10px; height: 10px;
+      border: 1.5px solid var(--oc-muted);
+      border-top-color: var(--oc-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .oc-pw-wrap { position: relative; display: flex; align-items: center; }
+    .oc-pw-wrap .oc-input { padding-right: 28px; width: 180px; }
+    .oc-pw-eye {
+      position: absolute; right: 6px;
+      background: none; border: none; cursor: pointer;
+      color: var(--oc-muted); font-size: 13px; line-height: 1; padding: 0;
+    }
+    .oc-pw-eye:hover { color: var(--oc-text); }
+    .oc-key-row-note {
+      font-size: 10px;
+      color: var(--oc-muted);
+      margin-top: 4px;
+    }
+    .oc-key-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .oc-key-remove {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 10px;
+    }
+    .oc-provider-note,
+    .oc-provider-privacy {
+      font-size: 10px;
+      color: var(--oc-muted);
+      margin-top: 6px;
+      line-height: 1.35;
+    }
+    .oc-provider-privacy {
+      padding: 8px 10px;
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.18);
+      border-radius: 6px;
+      background: rgba(var(--oc-accent-rgb), 0.06);
+    }
+    .oc-provider-connection {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .oc-provider-connection .oc-btn {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 10px;
+    }
+    .oc-provider-connection-status {
+      font-size: 10px;
+      line-height: 1.35;
+      color: var(--oc-muted);
+      min-height: 14px;
+    }
+    .oc-provider-connection-status.success { color: #4ade80; }
+    .oc-provider-connection-status.error { color: #f87171; }
+    .oc-provider-connection-status.running {
+      color: var(--oc-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .oc-provider-model-select,
+    .oc-provider-model-custom {
+      width: 180px;
+    }
+    .hidden { display: none !important; }
+
+    /* â"€â"€ Layer sub-tabs (Model page) â"€â"€ */
+    .layer-tabs {
+      display: flex; gap: 4px; margin-bottom: 12px;
+    }
+    .layer-tab-btn {
+      flex: 1; padding: 5px 0;
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 6px;
+      color: var(--oc-muted);
+      font-size: 11px; font-family: var(--font-ui);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    .layer-tab-btn:hover { color: var(--oc-text); }
+    .layer-tab-btn.active {
+      background: rgba(var(--oc-accent-rgb),0.15);
+      border-color: rgba(var(--oc-accent-rgb),0.45);
+      color: var(--oc-accent);
+    }
+    .layer-panel { display: none; flex-direction: column; gap: 0; }
+    .layer-panel.active { display: flex; }
+
+    .model-hint { font-size: 10px; color: var(--oc-muted); margin-top: 3px; }
+    .field-hint { font-size: 10px; color: var(--oc-muted); margin-top: 3px; }
+    .model-active-layer-label {
+      font-size: 10px;
+      font-family: var(--font-display);
+      letter-spacing: 0.12em;
+      color: var(--oc-accent);
+      opacity: 0.75;
+      text-transform: uppercase;
+    }
+
+    /* ── Active Layers dual-row card ── */
+    .active-layers-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .active-layer-row {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .active-layer-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .active-layer-name {
+      font-size: 10px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--oc-accent);
+      flex-shrink: 0;
+    }
+    .active-layer-model-name {
+      font-size: 14px;
+      color: var(--oc-text);
+      font-weight: 500;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .active-layer-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 20px;
+      background: rgba(74, 222, 128, 0.12);
+      color: #4ade80;
+      flex-shrink: 0;
+    }
+    .active-layer-badge:empty { display: none; }
+    .active-layer-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+    }
+    .al-meta-item {
+      font-size: 11px;
+      color: var(--oc-dim);
+    }
+    .al-meta-item:empty { display: none; }
+    .al-meta-item + .al-meta-item:not(:empty)::before {
+      content: "·";
+      margin-right: 10px;
+      opacity: 0.4;
+    }
+
+    /* ── Temperature dual-input control ── */
+    .temp-control { display: flex; flex-direction: column; gap: 8px; }
+    .temp-presets { display: flex; gap: 6px; }
+    .preset-chip {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 11px;
+      font-family: var(--font-ui);
+      color: var(--oc-muted);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    .preset-chip:hover { color: var(--oc-text); border-color: rgba(var(--oc-accent-rgb),0.4); }
+    .preset-chip.active {
+      background: rgba(var(--oc-accent-rgb),0.18);
+      border-color: rgba(var(--oc-accent-rgb),0.55);
+      color: var(--oc-accent);
+    }
+    .temp-input-row { display: flex; align-items: center; gap: 10px; }
+    .temp-slider-wrap { position: relative; flex: 1; padding-bottom: 18px; }
+    .temp-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 3px;
+      border-radius: 3px;
+      background: linear-gradient(to right,
+        rgba(var(--oc-accent-rgb),0.45) 0%,
+        rgba(var(--oc-accent-rgb),0.45) 50%,
+        rgba(251,191,36,0.35) 50%,
+        rgba(251,191,36,0.35) 100%
+      );
+      cursor: pointer;
+      outline: none;
+    }
+    .temp-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--oc-accent);
+      cursor: pointer;
+      box-shadow: 0 0 0 2px rgba(var(--oc-accent-rgb),0.25);
+    }
+    .temp-ticks {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+    .temp-ticks span {
+      font-size: 9px;
+      color: var(--oc-muted);
+      opacity: 0.65;
+    }
+    .temp-ticks .tick-hot {
+      color: #fbbf24;
+      opacity: 1;
+      font-weight: 600;
+    }
+    .temp-number {
+      width: 68px;
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      color: var(--oc-text);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 13px;
+      font-family: "Courier New", monospace;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .temp-number:focus { outline: none; border-color: var(--oc-accent); }
+
+    /* ── Per-layer override toggle rows ── */
+    .layer-override-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--oc-border);
+    }
+    .layer-override-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .override-label-group {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .override-inherited-value {
+      font-size: 13px;
+      color: var(--oc-muted);
+      transition: opacity 0.15s;
+    }
+    .override-inherited-value.faded { opacity: 0.35; }
+    .override-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      width: fit-content;
+      user-select: none;
+    }
+    .override-toggle input[type="checkbox"] { opacity: 0; width: 0; height: 0; position: absolute; }
+    .override-toggle .oc-toggle-track {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+      display: block;
+    }
+    .override-toggle-label {
+      font-size: 12px;
+      color: var(--oc-muted);
+    }
+    .override-input-area[hidden] { display: none; }
+    .override-input-area {
+      margin-top: 6px;
+    }
+    .layer-temp-control .temp-slider-wrap { padding-bottom: 18px; }
+    .layer-temp-control .temp-input-row { margin-top: 4px; }
+    .oc-model-status-card {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .oc-model-status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .oc-warning-banner {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      color: #fbbf24;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .oc-model-listbox {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 2px;
+      max-height: 240px;
+      overflow: auto;
+    }
+    .oc-model-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--oc-text);
+    }
+    .oc-model-option[aria-selected="true"] {
+      border-color: rgba(var(--oc-accent-rgb), 0.55);
+      box-shadow: 0 0 0 1px rgba(var(--oc-accent-rgb), 0.18);
+      background: rgba(var(--oc-accent-rgb), 0.12);
+    }
+    .oc-model-option-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      cursor: pointer;
+    }
+    .oc-model-option-copy {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 12px;
+    }
+    .oc-model-empty {
+      padding: 10px 12px;
+      border: 1px dashed var(--oc-border);
+      border-radius: 8px;
+      color: var(--oc-muted);
+      font-size: 12px;
+    }
+    .oc-btn-danger {
+      border-color: rgba(220, 80, 80, 0.35);
+      color: #ff9c9c;
+    }
+    .oc-btn-danger:hover {
+      border-color: rgba(220, 80, 80, 0.55);
+      color: #ffd2d2;
+    }
+    .oc-ctx-wrap { display: flex; align-items: center; gap: 6px; }
+    .oc-ctx-input { width: 90px; text-align: right; }
+    .oc-ctx-input:disabled { opacity: 0.45; }
+    .oc-ctx-input.is-auto { opacity: 0.55; cursor: pointer; }
+    .oc-ctx-wrap:has(.oc-ctx-input:disabled) { cursor: pointer; }
+    .oc-ctx-wrap:has(.oc-ctx-input.is-auto) { cursor: pointer; }
+    .oc-btn-auto { min-width: 52px; }
+    .oc-btn-auto.active { background: rgba(var(--oc-accent-rgb), 0.2); border-color: var(--oc-accent); color: var(--oc-accent); }
+
+    /* â"€â"€ Model info panel (Ollama section) â"€â"€ */
+    .oc-model-info-panel {
+      margin-top: 12px;
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .oc-model-info-grid {
+      display: flex;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+    .oc-model-info-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 6px 16px 6px 0;
+      min-width: 80px;
+    }
+    .oc-model-info-cell:not(:last-child) {
+      margin-right: 10px;
+      padding-right: 16px;
+      border-right: 1px solid var(--oc-border);
+    }
+    .oc-model-info-label {
+      font-size: 10px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--oc-muted);
+    }
+    .oc-model-info-value {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--oc-text);
+    }
+    .oc-pull-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .oc-pull-row .oc-input {
+      flex: 1;
+    }
+    .oc-progress-bar-wrap {
+      height: 6px;
+      background: var(--oc-control-track);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 6px 0;
+    }
+    .oc-progress-bar {
+      height: 100%;
+      background: var(--oc-accent);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .oc-pull-status-text {
+      font-size: 12px;
+      color: var(--oc-muted);
+    }
+    .oc-pull-size-text {
+      font-size: 11px;
+      color: var(--oc-muted);
+    }
+    .oc-discover-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      max-height: 360px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .oc-discover-card {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .oc-discover-card-info { flex: 1; min-width: 0; }
+    .oc-discover-card-name { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+    .oc-discover-card-desc { font-size: 10px; color: var(--oc-muted); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .oc-discover-card-meta { font-size: 10px; color: var(--oc-muted); margin-bottom: 5px; }
+    .oc-discover-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .oc-discover-tag {
+      font-size: 9px; padding: 2px 6px;
+      background: var(--oc-surface3);
+      border: 1px solid var(--oc-border);
+      border-radius: 3px;
+      cursor: pointer; color: var(--oc-text);
+      transition: border-color 100ms;
+    }
+    .oc-discover-tag:hover { border-color: var(--oc-accent); }
+    .oc-discover-tag.selected { border-color: var(--oc-accent); color: var(--oc-accent); }
+    .oc-discover-card-action { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .oc-discover-pull-btn {
+      font-size: 11px; padding: 4px 10px;
+      background: var(--oc-accent); color: #fff;
+      border: none; border-radius: 4px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .oc-discover-pull-btn:disabled { opacity: 0.5; cursor: default; }
+    .oc-discover-pull-btn.pulled { background: var(--oc-surface3); color: var(--oc-muted); cursor: default; }
+    .oc-discover-progress {
+      font-size: 10px; color: var(--oc-muted); text-align: right; max-width: 100px; word-break: break-all;
+    }
+    .oc-discover-pull-error { font-size: 10px; color: #f87171; max-width: 100px; text-align: right; }
+    .oc-success-banner {
+      background: rgba(74, 222, 128, 0.1);
+      border: 1px solid rgba(74, 222, 128, 0.4);
+      color: #4ade80;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .key-saved-confirm {
+      font-size: 11px;
+      color: #5cb85c;
+      transition: opacity 0.3s;
+      min-width: 14px;
+    }
+    .key-saved-confirm.hidden { opacity: 0; pointer-events: none; }
+    .pcdoctor-note {
+      font-size: 11px;
+      color: rgba(240,160,0,0.85);
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: rgba(240,160,0,0.08);
+      border-radius: 6px;
+      border: 1px solid rgba(240,160,0,0.2);
+    }
+    .keys-note { font-size: 10px; color: var(--oc-muted); margin-top: 6px; }
+
+    /* â"€â"€ System memory bars (Model tab, Ollama only) â"€â"€ */
+    .oc-mem-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .oc-mem-label { font-size:10px; color:var(--oc-muted); width:60px; flex-shrink:0; }
+    .oc-mem-track {
+      flex:1; height:6px; background:var(--oc-surface3);
+      border-radius:3px; overflow:hidden;
+    }
+    .oc-mem-fill { height:100%; background:var(--oc-accent); border-radius:3px; transition:width 300ms; }
+    .oc-mem-value { font-size:10px; color:var(--oc-muted); width:130px; text-align:right; flex-shrink:0; }
+    .oc-mem-unavailable { font-size:10px; color:var(--oc-muted); margin-top:4px; }
+
+    .memory-viewer-content {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .memory-viewer-empty {
+      font-size: 12px;
+      color: var(--oc-muted);
+      padding: 2px 0;
+    }
+    .memory-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .memory-section-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--oc-muted);
+      text-transform: uppercase;
+      margin: 12px 0 4px;
+    }
+    .memory-section-card {
+      padding: 12px 14px;
+    }
+    .memory-entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--oc-border);
+      font-size: 13px;
+      color: var(--oc-text);
+    }
+    .memory-entry:last-child { border-bottom: none; }
+    .memory-entry-text {
+      flex: 1;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .memory-entry-delete {
+      background: none;
+      border: none;
+      color: var(--oc-dim);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 2px;
+      flex-shrink: 0;
+    }
+    .memory-entry-delete:hover { color: rgba(220,80,80,0.9); }
+    .memory-actions-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .memory-action-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1 1 240px;
+    }
+    .memory-action-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .btn-danger {
+      background: rgba(224, 92, 92, 0.15);
+      border: 1px solid rgba(224, 92, 92, 0.35);
+      color: #ffb3b3;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .btn-danger:hover {
+      background: rgba(224, 92, 92, 0.22);
+      border-color: rgba(255, 140, 140, 0.42);
+      color: #ffd3d3;
+    }
+    .oc-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 900;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .oc-modal-panel {
+      background: var(--oc-surface);
+      border: 1px solid var(--oc-border);
+      border-radius: 12px;
+      padding: 24px;
+      width: 520px;
+      max-width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    }
+    .oc-modal-copy {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--oc-dim);
+    }
+    .oc-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .heartbeat-segment-group {
+      display: inline-flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .heartbeat-segment-btn {
+      min-width: 70px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 2px solid var(--oc-border);
+      background: var(--oc-surface2);
+      color: var(--oc-muted);
+      font-size: 12px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .heartbeat-segment-btn:hover {
+      color: var(--oc-text);
+    }
+    .heartbeat-segment-btn.active {
+      border-color: var(--oc-accent);
+      color: var(--oc-accent);
+      background: rgba(var(--oc-accent-rgb), 0.08);
+    }
+    .heartbeat-inline-input {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .heartbeat-inline-input.hidden {
+      display: none;
+    }
+    @media (max-width: 760px) {
+      .voice-group-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+    }
+
+    /* â"€â"€ Status â"€â"€ */
+    .s-status {
+      font-size: 12px;
+      color: var(--oc-accent);
+      min-height: 18px;
+      transition: opacity 0.3s;
+    }
+    .s-status.hidden { opacity: 0; }
+
+    /* â"€â"€ Pulled models grid â"€â"€ */
+    .oc-model-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .oc-model-card {
+      background: var(--oc-surface2);
+      border: 1px solid var(--oc-border);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      position: relative;
+      transition: border-color 150ms, opacity 150ms;
+    }
+    .oc-model-card:hover { border-color: var(--oc-accent); }
+    .oc-model-card.active {
+      border-color: var(--oc-accent);
+      box-shadow: 0 0 0 1px var(--oc-accent);
+    }
+    .oc-model-card.dimmed { opacity: 0.45; }
+    .oc-model-card-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; word-break: break-all; }
+    .oc-model-card-arch { font-size: 10px; color: var(--oc-muted); margin-bottom: 6px; }
+    .oc-model-card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .oc-cap-badge {
+      font-size: 9px; font-weight: 600; padding: 2px 5px;
+      border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .oc-cap-badge.tools    { background: #16a34a22; color: #4ade80; border: 1px solid #16a34a44; }
+    .oc-cap-badge.vision   { background: #1d4ed822; color: #60a5fa; border: 1px solid #1d4ed844; }
+    .oc-cap-badge.thinking { background: #7c3aed22; color: #c084fc; border: 1px solid #7c3aed44; }
+    .oc-cap-badge.audio    { background: #c2410c22; color: #fb923c; border: 1px solid #c2410c44; }
+    .oc-cap-badge.completion { background: rgba(255,255,255,0.06); color: var(--oc-muted); border: 1px solid var(--oc-border); }
+    .oc-model-card-meta { font-size: 10px; color: var(--oc-muted); }
+    .oc-model-card-footer { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+    .oc-model-active-badge {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--oc-accent); padding: 2px 5px; border: 1px solid var(--oc-accent); border-radius: 3px;
+    }
+    .oc-model-runability { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .oc-model-runability.green  { background: #4ade80; }
+    .oc-model-runability.amber  { background: #fbbf24; }
+    .oc-model-runability.red    { background: #f87171; }
+    .oc-model-delete-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: none; color: var(--oc-muted);
+      cursor: pointer; font-size: 13px; line-height: 1; padding: 2px;
+      opacity: 0; transition: opacity 100ms;
+    }
+    .oc-model-card:hover .oc-model-delete-btn { opacity: 0.6; }
+    .oc-model-delete-btn:hover { color: #f87171; opacity: 1 !important; }
+    .oc-model-tools-warn {
+      font-size: 9px; color: #fbbf24; margin-top: 5px;
+      border: 1px solid #fbbf2444; background: #fbbf2411;
+      padding: 3px 6px; border-radius: 3px;
+    }
+    .oc-section-header-row {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
+    }
+    .oc-btn-icon {
+      background: none; border: 1px solid var(--oc-border); color: var(--oc-muted);
+      border-radius: 6px; padding: 3px 8px; font-size: 14px; cursor: pointer;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .oc-btn-icon:hover { color: var(--oc-text); border-color: rgba(255,255,255,0.2); }
+    .oc-model-cards-loading, .oc-model-cards-empty {
+      font-size: 12px; color: var(--oc-muted); padding: 20px 0; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="s-titlebar">
+    <span class="s-titlebar-label" id="settings-version-label">
+      <img class="s-titlebar-icon" src="assets/brand/icon.png" alt="" aria-hidden="true">
+      <span class="s-titlebar-text"><span class="s-titlebar-bold">Open</span><span class="s-titlebar-normal"> Companion</span></span>
+    </span>
+    <button class="s-close-btn" id="s-close" title="Close">&times;</button>
+  </div>
+
+  <div class="oc-wrap">
+    <div class="oc-sidebar">
+      <div class="oc-logo">
+        <img class="oc-logo-icon" src="assets/brand/icon.png" alt="" aria-hidden="true">
+        <span class="oc-logo-text"><span style="font-weight:700">Open</span><span style="font-weight:400;opacity:0.72"> Companion</span></span>
+      </div>
+
+      <button class="oc-nav-btn active" data-tab="persona">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg>
+        Soul
+      </button>
+      <button class="oc-nav-btn" data-tab="model">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="8" rx="2"/><path d="M5 4V3M8 4V2M11 4V3"/></svg>
+        Model
+      </button>
+      <button class="oc-nav-btn" data-tab="memory">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="6" rx="5" ry="3"/><path d="M3 6v4c0 1.66 2.24 3 5 3s5-1.34 5-3V6"/></svg>
+        Memory
+      </button>
+      <button class="oc-nav-btn" data-tab="heartbeat">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h2l1.3-2.7L8 11l1.8-4 1.2 1H13.5"/></svg>
+        Heartbeat
+      </button>
+      <button class="oc-nav-btn" data-tab="audio">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3 8a5 5 0 0010 0M8 13v2"/></svg>
+        Audio
+      </button>
+      <button class="oc-nav-btn" data-tab="themes">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5V8l3.5 2"/></svg>
+        Themes
+      </button>
+      <button class="oc-nav-btn" data-tab="sandbox">
+        <svg class="oc-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="12" height="8" rx="1.5"/><path d="M5 5V3.5a3 3 0 016 0V5"/><path d="M8 9v2"/></svg>
+        Sandbox
+      </button>
+    </div>
+
+    <div class="oc-content">
+
+      <!-- â•â•â•â• SOUL â•â•â•â• -->
+      <div class="oc-page active" id="page-persona">
+        <div>
+          <div class="oc-page-title">Soul</div>
+          <div class="oc-page-sub">Your companion's identity. Changes save automatically.</div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-row">
+            <div><div class="oc-label">Companion name</div><div class="oc-sublabel">The name shown across the app.</div></div>
+            <input class="oc-input" id="persona-name" placeholder="Nova" />
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Pronouns</div><div class="oc-sublabel">Used in soul rendering and generated prompts.</div></div>
+            <select class="oc-select" id="persona-pronouns">
+              <option value="she/her">she/her</option>
+              <option value="he/him">he/him</option>
+              <option value="they/them">they/them</option>
+              <option value="it/its">it/its</option>
+              <option value="custom">customâ€¦</option>
+            </select>
+          </div>
+          <div class="oc-row" style="display:none;" id="persona-pronouns-custom-row">
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%;">
+              <input class="oc-input" id="persona-pronoun-subject" placeholder="xe" />
+              <input class="oc-input" id="persona-pronoun-object" placeholder="xem" />
+              <input class="oc-input" id="persona-pronoun-possessive" placeholder="xyr" />
+            </div>
+          </div>
+          <div class="oc-row" style="border-bottom:none; padding-bottom:0;">
+            <div><div class="oc-label">What should they call you?</div><div class="oc-sublabel">Used in companion-facing identity and memory context.</div></div>
+            <input class="oc-input" id="persona-user-name" placeholder="What should they call you?" />
+          </div>
+        </div>
+
+        <div class="oc-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div>
+              <div class="oc-label">Soul file</div>
+              <div class="oc-sublabel">The raw soul prompt for your companion. Edit directly or regenerate with AI.</div>
+            </div>
+            <button class="btn-ghost" id="soul-regenerate-btn" type="button">Regenerate with AI</button>
+          </div>
+          <textarea class="oc-textarea" id="persona-soul-raw" rows="16" placeholder="Loading soul file&hellip;" style="font-family:monospace; font-size:12px;"></textarea>
+        </div>
+
+        <div class="save-bar">
+          <span class="s-status hidden" id="status-persona"></span>
+          <button class="btn-ghost" data-reset="persona">Reset</button>
+        </div>
+      </div>
+
+      <!-- Soul regenerate modal -->
+      <div id="soul-regen-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:900; align-items:center; justify-content:center;">
+        <div style="background:var(--oc-surface); border:1px solid var(--oc-border); border-radius:12px; padding:24px; width:560px; max-width:90vw; display:flex; flex-direction:column; gap:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="oc-section-title" style="margin:0;">Regenerate Soul with AI</div>
+            <button class="btn-ghost" id="soul-regen-close" type="button">&#x2715;</button>
+          </div>
+          <div class="oc-sublabel">Edit the prompt below, then click Generate. The result will replace the current soul file.</div>
+          <textarea class="oc-textarea" id="soul-regen-prompt" rows="12" style="font-family:monospace; font-size:12px;" placeholder="Loading template&hellip;"></textarea>
+          <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button class="btn-ghost" id="soul-regen-cancel" type="button">Cancel</button>
+            <button class="btn-accent" id="soul-regen-generate" type="button">Generate</button>
+          </div>
+          <div class="s-status hidden" id="status-soul-regen" style="text-align:center;"></div>
+        </div>
+      </div>
+
+      <!-- â•â•â•â• MODEL â•â•â•â• -->
+      <div class="oc-page" id="page-model">
+        <div>
+          <div class="oc-page-title">Model &amp; LLM</div>
+          <div class="oc-page-sub">Provider, model selection, and generation settings</div>
+        </div>
+
+        <!-- System memory bar (Ollama only) -->
+        <div id="model-memory-bar" class="oc-card" style="display:none">
+          <div class="oc-card-header"><span>System Memory</span></div>
+          <div id="memory-bar-content">
+            <div class="oc-mem-row" id="vram-row">
+              <span class="oc-mem-label">GPU VRAM</span>
+              <div class="oc-mem-track"><div class="oc-mem-fill" id="vram-fill"></div></div>
+              <span class="oc-mem-value" id="vram-value"></span>
+            </div>
+            <div class="oc-mem-row" id="ram-row">
+              <span class="oc-mem-label">RAM</span>
+              <div class="oc-mem-track"><div class="oc-mem-fill" id="ram-fill"></div></div>
+              <span class="oc-mem-value" id="ram-value"></span>
+            </div>
+            <div id="vram-unavailable" style="display:none" class="oc-mem-unavailable">
+              GPU VRAM unknown â€" install nvidia-smi for VRAM detection
+            </div>
+          </div>
+        </div>
+
+        <!-- Â§1 â€" Default Brain Provider -->
+        <div class="oc-card">
+          <div class="oc-card-header">
+            <span>Default brain provider</span>
+          </div>
+          <div class="oc-row">
+            <div>
+              <div class="oc-label">Provider</div>
+              <div class="oc-sublabel">Active for all layers unless overridden below</div>
+            </div>
+            <select class="oc-select" id="brain-provider">
+              <option value="anthropic">Anthropic</option>
+              <option value="chatgpt_oauth">ChatGPT Plus (OAuth)</option>
+              <option value="custom">Custom endpoint</option>
+              <option value="gemma">Gemma (Local)</option>
+              <option value="gemini">Gemini</option>
+              <option value="ollama">Ollama</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="qwen">Qwen (Local)</option>
+              <option value="qwen_cloud">Qwen (DashScope)</option>
+            </select>
+          </div>
+          <div class="oc-row" style="align-items:flex-start; border-bottom:none; padding-bottom:0; display:none;">
+            <div class="oc-label" style="padding-top:6px;">Default model</div>
+            <div id="brain-model-container"></div>
+          </div>
+        </div>
+
+        <!-- Â§1 â€" Pulled models grid (Ollama only) -->
+        <div id="model-pulled-section">
+          <div class="oc-section-header-row">
+            <span class="oc-section-title">Your Models</span>
+            <button class="oc-btn-icon" id="refresh-pulled-btn" title="Refresh model list">&#8635;</button>
+          </div>
+          <div id="model-cards-grid" class="oc-model-cards-grid">
+            <!-- cards injected by JS -->
+          </div>
+          <div id="model-cards-loading" class="oc-model-cards-loading" style="display:none">Loading models&hellip;</div>
+          <div id="model-cards-empty" class="oc-model-cards-empty" style="display:none">No local models found. Pull one below.</div>
+        </div>
+
+        <!-- Â§1b â€" API Keys (cloud providers) -->
+        <div class="oc-card" id="model-apikeys-card">
+          <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;">
+            <div class="oc-section-title" style="margin-bottom:0;">API keys</div>
+            <span class="keys-note">Stored in OS keychain</span>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">OpenAI</div></div>
+            <div class="oc-key-row-actions">
+              <div class="oc-pw-wrap">
+                <input class="oc-input" type="password" id="apikey-openai" placeholder="sk-..." autocomplete="off" />
+                <button class="oc-pw-eye" type="button" data-target="apikey-openai">ðŸ‘</button>
+              </div>
+              <button class="oc-btn oc-key-remove" type="button" data-remove-key="openai">Remove</button>
+              <span class="key-saved-confirm hidden" id="confirm-openai">âœ"</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Anthropic</div></div>
+            <div class="oc-key-row-actions">
+              <div class="oc-pw-wrap">
+                <input class="oc-input" type="password" id="apikey-anthropic" placeholder="sk-ant-..." autocomplete="off" />
+                <button class="oc-pw-eye" type="button" data-target="apikey-anthropic">ðŸ‘</button>
+              </div>
+              <button class="oc-btn oc-key-remove" type="button" data-remove-key="anthropic">Remove</button>
+              <span class="key-saved-confirm hidden" id="confirm-anthropic">âœ"</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Gemini</div></div>
+            <div class="oc-key-row-actions">
+              <div class="oc-pw-wrap">
+                <input class="oc-input" type="password" id="apikey-gemini" placeholder="AIza..." autocomplete="off" />
+                <button class="oc-pw-eye" type="button" data-target="apikey-gemini">ðŸ‘</button>
+              </div>
+              <button class="oc-btn oc-key-remove" type="button" data-remove-key="gemini">Remove</button>
+              <span class="key-saved-confirm hidden" id="confirm-gemini">âœ"</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div>
+              <div class="oc-label">OpenRouter</div>
+              <div class="oc-sublabel"><a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">Get a key</a></div>
+            </div>
+            <div class="oc-key-row-actions">
+              <div class="oc-pw-wrap">
+                <input class="oc-input" type="password" id="apikey-openrouter" placeholder="sk-or-..." autocomplete="off" />
+                <button class="oc-pw-eye" type="button" data-target="apikey-openrouter">ðŸ‘</button>
+              </div>
+              <button class="oc-btn oc-key-remove" type="button" data-remove-key="openrouter">Remove</button>
+              <span class="key-saved-confirm hidden" id="confirm-openrouter">âœ"</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Qwen DashScope</div></div>
+            <div class="oc-key-row-actions">
+              <div class="oc-pw-wrap">
+                <input class="oc-input" type="password" id="apikey-qwen" placeholder="sk-..." autocomplete="off" />
+                <button class="oc-pw-eye" type="button" data-target="apikey-qwen">ðŸ‘</button>
+              </div>
+              <button class="oc-btn oc-key-remove" type="button" data-remove-key="qwen">Remove</button>
+              <span class="key-saved-confirm hidden" id="confirm-qwen">âœ"</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Custom base URL</div></div>
+            <div class="oc-key-row-actions">
+              <input class="oc-input" type="text" id="apikey-custom-url" placeholder="https://my-server/v1" style="width:180px;" />
+              <span class="key-saved-confirm hidden" id="confirm-custom_url">âœ"</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div>
+              <div class="oc-label">Custom presets</div>
+              <div class="oc-sublabel">DeepSeek and Moonshot / Kimi use the Custom endpoint provider.</div>
+            </div>
+            <div class="oc-key-row-actions" style="align-items:flex-start;">
+              <button class="oc-btn" type="button" data-custom-base-url="https://api.deepseek.com/v1">DeepSeek</button>
+              <button class="oc-btn" type="button" data-custom-base-url="https://api.moonshot.cn/v1">Moonshot / Kimi</button>
+              <button class="oc-btn" type="button" data-custom-base-url="http://localhost:1234/v1">LM Studio</button>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Custom examples</div></div>
+            <div class="oc-sublabel" style="max-width:520px;">
+              Base URL: https://openrouter.ai/api/v1, http://localhost:1234/v1, https://api.together.xyz/v1, https://api.fireworks.ai/inference/v1<br />
+              Model: deepseek-v4-pro, moonshotai/Kimi-K2.6, llama-3.3-70b
+            </div>
+          </div>
+          <div class="oc-row" style="border-bottom:none; padding-bottom:0;">
+            <div><div class="oc-label">Custom API key</div></div>
+            <div class="oc-key-row-actions">
+              <div class="oc-pw-wrap">
+                <input class="oc-input" type="password" id="apikey-custom" placeholder="Optional" autocomplete="off" />
+                <button class="oc-pw-eye" type="button" data-target="apikey-custom">ðŸ‘</button>
+              </div>
+              <button class="oc-btn oc-key-remove" type="button" data-remove-key="custom">Remove</button>
+              <span class="key-saved-confirm hidden" id="confirm-custom">âœ"</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ChatGPT Plus OAuth connect card (hidden unless chatgpt_oauth provider selected) -->
+        <div class="oc-card" id="chatgpt-oauth-card" style="display:none">
+          <div class="oc-card-header"><span>ChatGPT Plus - OAuth</span></div>
+          <div id="chatgpt-oauth-disconnected">
+            <div class="oc-row" style="border-bottom:none; padding-bottom:0; flex-direction:column; align-items:flex-start; gap:10px;">
+              <div class="oc-sublabel">Connect your ChatGPT Plus or Pro account to use it as the brain provider. No API key required - your existing subscription covers usage.</div>
+              <button class="btn-accent oc-btn-primary" id="chatgpt-oauth-connect-btn" type="button">Connect with ChatGPT</button>
+              <div id="chatgpt-oauth-error" class="oc-sublabel" style="color:var(--oc-accent);display:none"></div>
+            </div>
+          </div>
+          <div id="chatgpt-oauth-connected" style="display:none">
+            <div class="oc-row">
+              <div>
+                <div class="oc-label">Status</div>
+                <div class="oc-sublabel" id="chatgpt-oauth-status-text">Connected</div>
+              </div>
+              <span style="color:var(--oc-accent); font-size:0.85rem; font-weight:600;">&#10003; Active</span>
+            </div>
+            <div class="oc-row" style="border-bottom:none; padding-bottom:0;">
+              <div>
+                <div class="oc-label">Account</div>
+                <div class="oc-sublabel" id="chatgpt-oauth-account-text"></div>
+              </div>
+              <button class="oc-btn" id="chatgpt-oauth-disconnect-btn" type="button">Disconnect</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- §2 — Active Layers card (always visible once provider is set) -->
+        <div class="oc-card" id="model-ollama-section" style="display:none">
+          <div class="oc-card-header">
+            <span id="model-section2-title">Active Layers</span>
+          </div>
+          <div class="active-layers-grid">
+
+            <!-- Companion layer row -->
+            <div class="active-layer-row" id="active-layer-companion">
+              <div class="active-layer-header">
+                <span class="active-layer-name">Companion</span>
+                <span class="active-layer-model-name" id="al-companion-model">—</span>
+                <span class="active-layer-badge" id="al-companion-badge"></span>
+              </div>
+              <div class="active-layer-meta" id="al-companion-meta">
+                <span class="al-meta-item" id="al-companion-provider"></span>
+                <span class="al-meta-item" id="al-companion-params"></span>
+                <span class="al-meta-item" id="al-companion-quant"></span>
+                <span class="al-meta-item" id="al-companion-ctx"></span>
+                <span class="al-meta-item" id="al-companion-vram"></span>
+                <span class="al-meta-item" id="al-companion-size"></span>
+                <span class="al-meta-item" id="al-companion-output"></span>
+                <span class="al-meta-item" id="al-companion-tools"></span>
+                <span class="al-meta-item" id="al-companion-embed"></span>
+              </div>
+            </div>
+
+            <!-- Assistant layer row -->
+            <div class="active-layer-row" id="active-layer-assistant">
+              <div class="active-layer-header">
+                <span class="active-layer-name">Assistant</span>
+                <span class="active-layer-model-name" id="al-assistant-model">—</span>
+                <span class="active-layer-badge" id="al-assistant-badge"></span>
+              </div>
+              <div class="active-layer-meta" id="al-assistant-meta">
+                <span class="al-meta-item" id="al-assistant-provider"></span>
+                <span class="al-meta-item" id="al-assistant-params"></span>
+                <span class="al-meta-item" id="al-assistant-quant"></span>
+                <span class="al-meta-item" id="al-assistant-ctx"></span>
+                <span class="al-meta-item" id="al-assistant-vram"></span>
+                <span class="al-meta-item" id="al-assistant-size"></span>
+                <span class="al-meta-item" id="al-assistant-output"></span>
+                <span class="al-meta-item" id="al-assistant-tools"></span>
+                <span class="al-meta-item" id="al-assistant-embed"></span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Keep legacy embed status element for embed check logic -->
+          <span id="embed-model-status" style="display:none"></span>
+        </div>
+
+        <!-- Â§3 â€" Context Window -->
+        <div class="oc-card">
+          <div class="oc-card-header"><span>Context window</span></div>
+          <div id="context-window-warning" class="oc-warning-banner" style="display:none"></div>
+          <div class="oc-row" id="ctx-row" style="border-bottom:none; padding-bottom:0;">
+            <div>
+              <div class="oc-label">Token budget</div>
+              <div class="oc-sublabel" id="s-ctx-model-max">Auto uses the model's maximum reported context</div>
+            </div>
+            <div class="oc-ctx-wrap">
+              <button class="oc-btn oc-btn-auto" id="s-ctx-auto-btn" type="button" title="Use model maximum">Auto</button>
+              <input type="number" class="oc-input oc-ctx-input" id="s-ctx" min="512" step="512" placeholder="e.g. 8192" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Â§4 â€" Discover & Pull -->
+        <div class="oc-card" id="model-pull-section">
+          <div class="oc-card-header"><span>Discover Models</span></div>
+
+          <!-- Search box -->
+          <div class="oc-pull-row" style="margin-bottom:10px;">
+            <input type="text" class="oc-input" id="model-discover-search" placeholder="Search modelsâ€¦" style="flex:1;">
+          </div>
+
+          <!-- Results grid -->
+          <div id="discover-results-grid" class="oc-discover-grid">
+            <!-- discover cards injected by JS -->
+          </div>
+          <div id="discover-loading" style="display:none; font-size:12px; color:var(--oc-muted); padding:12px 0; text-align:center;">Searchingâ€¦</div>
+          <div id="discover-offline" style="display:none; font-size:12px; color:var(--oc-muted); padding:12px 0; text-align:center;">Registry unavailable â€" showing curated list</div>
+        </div>
+
+        <!-- Â§5 â€" Generation + Per-layer -->
+        <div class="oc-card">
+          <div class="oc-card-header"><span>Generation</span></div>
+          <div class="oc-row" style="flex-direction:column; align-items:stretch; gap:8px; border-bottom:1px solid var(--oc-border); padding-bottom:14px;">
+            <div class="oc-label">Temperature</div>
+            <div class="temp-control" id="global-temp-control">
+              <div class="temp-presets">
+                <button class="preset-chip" type="button" data-value="0.3">Focused</button>
+                <button class="preset-chip" type="button" data-value="0.7">Balanced</button>
+                <button class="preset-chip" type="button" data-value="1.0">Creative</button>
+              </div>
+              <div class="temp-input-row">
+                <div class="temp-slider-wrap">
+                  <input type="range" class="temp-slider" id="s-temp" min="0" max="2" step="0.05" value="0.8" />
+                  <div class="temp-ticks">
+                    <span>0</span>
+                    <span>0.5</span>
+                    <span class="tick-hot">1.0</span>
+                    <span>1.5</span>
+                    <span>2.0</span>
+                  </div>
+                </div>
+                <input type="number" class="temp-number" id="s-temp-number" min="0" max="2" step="0.01" value="0.80" />
+              </div>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div>
+              <div class="oc-label">Max output tokens</div>
+              <div class="oc-sublabel">Default output budget for layers that do not override it.</div>
+            </div>
+            <input class="oc-input" id="s-max-tokens" type="number" min="64" step="64" value="1024" style="width:110px;" />
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Stream responses</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-stream" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+          <div class="oc-row" style="border-bottom:none; padding-bottom:0;">
+            <div><div class="oc-label">Fallback to CPU</div><div class="oc-sublabel">If GPU VRAM is insufficient</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-cpu" /><span class="oc-toggle-track"></span></label>
+          </div>
+        </div>
+
+        <!-- Â§5b â€" Per-layer Brain -->
+        <div class="oc-card">
+          <div class="oc-card-header"><span>Per-layer brain</span></div>
+          <div class="layer-tabs" id="model-layer-tabs">
+            <button class="layer-tab-btn active" id="model-tab-companion" data-layer="companion">Companion</button>
+            <button class="layer-tab-btn" id="model-tab-assistant" data-layer="assistant">Assistant</button>
+          </div>
+
+          <!-- Companion panel -->
+          <div class="layer-panel active" id="model-panel-companion">
+            <div class="oc-row">
+              <div><div class="oc-label">Provider</div></div>
+              <select class="oc-select" id="companion-provider">
+                <option value="default">Use default</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="chatgpt_oauth">ChatGPT Plus (OAuth)</option>
+                <option value="custom">Custom endpoint</option>
+                <option value="gemma">Gemma (Local)</option>
+                <option value="gemini">Gemini</option>
+                <option value="ollama">Ollama</option>
+                <option value="openai">OpenAI</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="qwen">Qwen (Local)</option>
+                <option value="qwen_cloud">Qwen (DashScope)</option>
+              </select>
+            </div>
+            <div class="field-hint" id="companion-provider-summary"></div>
+            <div class="oc-row" style="border-bottom:none; padding-bottom:0; align-items:flex-start;">
+              <div class="oc-label" style="padding-top:6px;">Model</div>
+              <div id="companion-model-container"></div>
+            </div>
+            <div class="layer-override-row" id="companion-temperature-override-row">
+              <div class="override-label-group">
+                <div class="oc-label">Temperature</div>
+                <span class="override-inherited-value" id="companion-temperature-hint">0.80 (global)</span>
+              </div>
+              <label class="override-toggle">
+                <input type="checkbox" class="override-enabled-checkbox" id="companion-temperature-override-enabled" />
+                <span class="oc-toggle-track"></span>
+                <span class="override-toggle-label">Override</span>
+              </label>
+              <div class="override-input-area" id="companion-temperature-override-area" hidden>
+                <div class="temp-control layer-temp-control" id="companion-temp-control">
+                  <div class="temp-input-row">
+                    <div class="temp-slider-wrap">
+                      <input type="range" class="temp-slider" id="companion-temperature" min="0" max="2" step="0.05" value="0.8" />
+                      <div class="temp-ticks">
+                        <span>0</span>
+                        <span>0.5</span>
+                        <span class="tick-hot">1.0</span>
+                        <span>1.5</span>
+                        <span>2.0</span>
+                      </div>
+                    </div>
+                    <input type="number" class="temp-number" id="companion-temperature-number" min="0" max="2" step="0.01" value="0.80" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="layer-override-row" id="companion-max-tokens-override-row">
+              <div class="override-label-group">
+                <div class="oc-label">Max output tokens</div>
+                <span class="override-inherited-value" id="companion-max-tokens-hint">1,024 (global)</span>
+              </div>
+              <label class="override-toggle">
+                <input type="checkbox" class="override-enabled-checkbox" id="companion-max-tokens-override-enabled" />
+                <span class="oc-toggle-track"></span>
+                <span class="override-toggle-label">Override</span>
+              </label>
+              <div class="override-input-area" id="companion-max-tokens-override-area" hidden>
+                <input class="oc-input" id="companion-max-tokens" type="number" min="64" step="64" placeholder="1024" style="width:110px;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Assistant panel -->
+          <div class="layer-panel" id="model-panel-assistant">
+            <div class="field-hint" style="margin-bottom:8px;">Direct execution layer for concrete work. Use a capable model with strong tool use.</div>
+            <div class="oc-row">
+              <div><div class="oc-label">Provider</div></div>
+              <select class="oc-select" id="assistant-provider">
+                <option value="default">Use default</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="chatgpt_oauth">ChatGPT Plus (OAuth)</option>
+                <option value="custom">Custom endpoint</option>
+                <option value="gemma">Gemma (Local)</option>
+                <option value="gemini">Gemini</option>
+                <option value="ollama">Ollama</option>
+                <option value="openai">OpenAI</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="qwen">Qwen (Local)</option>
+                <option value="qwen_cloud">Qwen (DashScope)</option>
+              </select>
+            </div>
+            <div class="field-hint" id="assistant-provider-summary"></div>
+            <div class="oc-row" style="border-bottom:none; padding-bottom:0; align-items:flex-start;">
+              <div class="oc-label" style="padding-top:6px;">Model</div>
+              <div id="assistant-model-container"></div>
+            </div>
+            <div class="layer-override-row" id="assistant-temperature-override-row">
+              <div class="override-label-group">
+                <div class="oc-label">Temperature</div>
+                <span class="override-inherited-value" id="assistant-temperature-hint">0.80 (global)</span>
+              </div>
+              <label class="override-toggle">
+                <input type="checkbox" class="override-enabled-checkbox" id="assistant-temperature-override-enabled" />
+                <span class="oc-toggle-track"></span>
+                <span class="override-toggle-label">Override</span>
+              </label>
+              <div class="override-input-area" id="assistant-temperature-override-area" hidden>
+                <div class="temp-control layer-temp-control" id="assistant-temp-control">
+                  <div class="temp-input-row">
+                    <div class="temp-slider-wrap">
+                      <input type="range" class="temp-slider" id="assistant-temperature" min="0" max="2" step="0.05" value="0.8" />
+                      <div class="temp-ticks">
+                        <span>0</span>
+                        <span>0.5</span>
+                        <span class="tick-hot">1.0</span>
+                        <span>1.5</span>
+                        <span>2.0</span>
+                      </div>
+                    </div>
+                    <input type="number" class="temp-number" id="assistant-temperature-number" min="0" max="2" step="0.01" value="0.80" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="layer-override-row" id="assistant-max-tokens-override-row">
+              <div class="override-label-group">
+                <div class="oc-label">Max output tokens</div>
+                <span class="override-inherited-value" id="assistant-max-tokens-hint">1,024 (global)</span>
+              </div>
+              <label class="override-toggle">
+                <input type="checkbox" class="override-enabled-checkbox" id="assistant-max-tokens-override-enabled" />
+                <span class="oc-toggle-track"></span>
+                <span class="override-toggle-label">Override</span>
+              </label>
+              <div class="override-input-area" id="assistant-max-tokens-override-area" hidden>
+                <input class="oc-input" id="assistant-max-tokens" type="number" min="64" step="64" placeholder="1024" style="width:110px;" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="save-bar">
+          <span class="s-status hidden" id="status-model"></span>
+          <button class="btn-ghost" data-reset="model">Reset</button>
+        </div>
+      </div>
+
+      <!-- â•â•â•â• MEMORY â•â•â•â• -->
+      <div class="oc-page" id="page-memory">
+        <div>
+          <div class="oc-page-title">Memory &amp; dream</div>
+          <div class="oc-page-sub">Write-back, extraction source, consolidation, and retrieval settings. Changes save automatically.</div>
+        </div>
+        <div class="oc-card">
+          <div class="oc-row">
+            <div><div class="oc-label">Memory write-back</div><div class="oc-sublabel">Save notable exchanges to memory</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-mem-writeback" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Retrieval (nomic-embed)</div><div class="oc-sublabel">Semantic search on recall</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-mem-embed" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Top-K memories injected</div></div>
+            <div class="oc-slider-wrap">
+              <input type="range" class="oc-slider" id="s-topk" min="1" max="20" value="5" />
+              <span class="oc-slider-val" id="s-topk-val">5</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div>
+              <div class="oc-label">Memory extraction source</div>
+              <div class="oc-sublabel">Choose where memory write-back runs. Retrieval embeddings stay local.</div>
+            </div>
+            <select class="oc-select" id="s-extraction-source" style="min-width:180px;max-width:240px;">
+              <option value="brain">Brain</option>
+              <option value="local">Local Ollama</option>
+              <option value="api">Specific API</option>
+            </select>
+          </div>
+          <div class="oc-row" id="s-extraction-provider-row" style="display:none;">
+            <div>
+              <div class="oc-label">API provider</div>
+              <div class="oc-sublabel">Uses your existing provider credentials from the model settings.</div>
+            </div>
+            <select class="oc-select" id="s-extraction-provider" style="min-width:180px;max-width:240px;">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="gemini">Gemini</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="qwen_cloud">Qwen DashScope</option>
+              <option value="custom">Custom endpoint</option>
+            </select>
+          </div>
+          <div class="oc-row" id="s-extraction-base-url-row" style="display:none;">
+            <div>
+              <div class="oc-label">Custom API base URL</div>
+              <div class="oc-sublabel">Required only when the extraction provider is a custom OpenAI-compatible endpoint.</div>
+            </div>
+            <input class="oc-input" id="s-extraction-base-url" placeholder="https://my-server/v1" />
+          </div>
+          <div class="oc-row" id="s-extraction-model-local-row">
+            <div>
+              <div class="oc-label">Local extraction model</div>
+              <div class="oc-sublabel">Ollama model used only for memory write-back.</div>
+            </div>
+            <select class="oc-select" id="s-extraction-model" style="min-width:180px;max-width:240px;">
+              <option value="">(use companion model)</option>
+            </select>
+          </div>
+          <div class="oc-row" id="s-extraction-model-remote-row" style="display:none; border-bottom:none; padding-bottom:0;">
+            <div>
+              <div class="oc-label">Remote extraction model</div>
+              <div class="oc-sublabel" id="s-extraction-remote-model-hint">Leave blank to inherit the companion brain model when source is Brain.</div>
+            </div>
+            <input class="oc-input" id="s-extraction-model-remote" placeholder="gpt-4.1-mini" />
+          </div>
+        </div>
+        <div class="oc-card">
+          <div class="oc-section-title">Dream consolidation</div>
+          <div class="oc-row">
+            <div><div class="oc-label">Enable dream.py</div><div class="oc-sublabel">Background memory pruning &amp; compression</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-dream-enabled" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Schedule</div></div>
+            <select class="oc-select" id="s-dream-schedule">
+              <option>On idle (10 min)</option>
+              <option>On app close</option>
+              <option>Daily 3:00 AM</option>
+              <option>Manual only</option>
+            </select>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Max memory entries</div></div>
+            <input class="oc-input" id="s-max-entries" type="number" value="500" min="50" max="5000" style="width:80px;" />
+          </div>
+        </div>
+        <div class="oc-card">
+          <div class="oc-card-header">
+            <span>MEMORY ACTIONS</span>
+          </div>
+          <div class="memory-actions-row">
+            <div class="memory-action-copy">
+              <div class="oc-label">Run memory actions now</div>
+              <div class="oc-sublabel">Dream consolidates the current memory file immediately. Reset clears long-term memory right away.</div>
+            </div>
+            <div class="memory-action-buttons">
+              <button class="btn-ghost" type="button" id="memory-dream-now-btn">Dream now</button>
+              <button class="btn-danger" type="button" id="memory-reset-now-btn">Reset memory</button>
+            </div>
+          </div>
+        </div>
+        <div class="oc-card" id="memory-viewer-card">
+          <div class="oc-card-header">
+            <span>MEMORY</span>
+            <button class="btn-ghost" type="button" id="memory-refresh-btn">Refresh</button>
+          </div>
+          <div class="memory-viewer-content" id="memory-viewer-content">
+            <div class="memory-viewer-empty" id="memory-loading">Loading...</div>
+          </div>
+        </div>
+        <div class="save-bar">
+          <span class="s-status hidden" id="status-memory"></span>
+          <button class="btn-ghost" data-reset="memory">Reset</button>
+        </div>
+      </div>
+
+      <!-- â•â•â•â• HEARTBEAT â•â•â•â• -->
+      <div class="oc-page" id="page-heartbeat">
+        <div>
+          <div class="oc-page-title">Heartbeat</div>
+          <div class="oc-page-sub">Passive awareness controls for the runtime heartbeat.</div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-row">
+            <div><div class="oc-label">Enable heartbeat</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="heartbeat-enabled" /><span class="oc-toggle-track"></span></label>
+          </div>
+
+          <div class="oc-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+            <div class="oc-label">Interval</div>
+            <div class="heartbeat-segment-group" id="heartbeat-interval-group">
+              <button class="heartbeat-segment-btn" type="button" data-heartbeat-interval="600">10 min</button>
+              <button class="heartbeat-segment-btn" type="button" data-heartbeat-interval="1800">30 min</button>
+              <button class="heartbeat-segment-btn" type="button" data-heartbeat-interval="3600">1 hour</button>
+              <button class="heartbeat-segment-btn" type="button" data-heartbeat-interval="10800">3 hours</button>
+              <button class="heartbeat-segment-btn" type="button" data-heartbeat-interval="21600">6 hours</button>
+              <button class="heartbeat-segment-btn" type="button" data-heartbeat-interval="custom">Custom</button>
+            </div>
+            <div class="heartbeat-inline-input hidden" id="heartbeat-custom-interval-row">
+              <label class="oc-label" for="heartbeat-custom-minutes">Custom interval</label>
+              <input class="oc-input" id="heartbeat-custom-minutes" type="number" min="1" max="1440" style="width:88px;" />
+              <span class="oc-sublabel">minutes</span>
+            </div>
+          </div>
+
+          <div class="oc-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+            <div class="oc-row" style="width:100%; padding:0; border-bottom:none;">
+              <div>
+                <div class="oc-label">Only fire when I'm idle</div>
+                <div class="oc-sublabel">Heartbeat only runs after you haven't typed or clicked for a while.</div>
+              </div>
+              <label class="oc-toggle"><input type="checkbox" id="heartbeat-only-idle" /><span class="oc-toggle-track"></span></label>
+            </div>
+            <div class="heartbeat-inline-input hidden" id="heartbeat-idle-threshold-row">
+              <label class="oc-label" for="heartbeat-idle-threshold">Idle threshold</label>
+              <input class="oc-input" id="heartbeat-idle-threshold" type="number" min="1" style="width:72px;" />
+              <span class="oc-sublabel">minutes</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="save-bar">
+          <span class="s-status hidden" id="status-heartbeat"></span>
+          <button class="btn-ghost" data-reset="heartbeat">Reset</button>
+        </div>
+      </div>
+
+      <!-- â•â•â•â• AUDIO â•â•â•â• -->
+      <div class="oc-page" id="page-audio">
+        <div>
+          <div class="oc-page-title">Audio</div>
+          <div class="oc-page-sub">TTS, STT and voice settings</div>
+        </div>
+        <div class="oc-card">
+          <div class="oc-row">
+            <div><div class="oc-label">Text-to-speech (Kokoro)</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-tts-enabled" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+          <div class="oc-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+            <div class="oc-label">Voice</div>
+            <div class="voice-grid" id="s-voice-grid"></div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">TTS volume</div></div>
+            <div class="oc-slider-wrap">
+              <input type="range" class="oc-slider" id="s-vol" min="0" max="100" value="80" />
+              <span class="oc-slider-val" id="s-vol-val">80%</span>
+            </div>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Speech speed</div></div>
+            <div class="oc-slider-wrap">
+              <input type="range" class="oc-slider" id="s-speed" min="5" max="20" value="10" />
+              <span class="oc-slider-val" id="s-speed-val">1.0x</span>
+            </div>
+          </div>
+        </div>
+        <div class="oc-card">
+          <div class="oc-row">
+            <div><div class="oc-label">Speech-to-text (Whisper)</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-stt-enabled" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Whisper model</div></div>
+            <select class="oc-select" id="s-whisper">
+              <option value="base">base</option>
+              <option value="base.en">base.en</option>
+              <option value="small">small</option>
+              <option value="medium">medium</option>
+              <option value="large-v3">large-v3</option>
+            </select>
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Push-to-talk key</div></div>
+            <input class="oc-input" id="s-ptt-key" placeholder="e.g. Left Ctrl" style="width:110px;" />
+          </div>
+          <div class="oc-row">
+            <div><div class="oc-label">Auto-send on silence</div><div class="oc-sublabel">After 1.5 s of quiet</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-auto-send" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+        </div>
+        <div class="save-bar">
+          <span class="s-status hidden" id="status-audio"></span>
+          <button class="btn-ghost" data-reset="audio">Reset</button>
+        </div>
+      </div>
+
+      <!-- â•â•â•â• THEMES â•â•â•â• -->
+      <div class="oc-page" id="page-themes">
+        <div>
+          <div class="oc-page-title">Themes</div>
+          <div class="oc-page-sub">Base mode, accent color, and custom presets</div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Base mode</div>
+          <div class="base-mode-row">
+            <button class="base-mode-btn selected" id="btn-dark" style="background:#0e0e10; color:#f0f0f2;">Dark Mode</button>
+            <button class="base-mode-btn" id="btn-day" style="background:#f0ede8; color:#1a1612;">Light Mode</button>
+          </div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Accent color</div>
+          <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+            <div class="accent-preview" id="s-accent-preview" style="background: rgb(124,106,247);"></div>
+            <div>
+              <div class="oc-label">Current accent</div>
+              <div class="oc-sublabel" id="s-accent-hex">#7c6af7</div>
+            </div>
+          </div>
+          <div class="color-picker-row">
+            <div class="rgb-input-group">
+              <span class="rgb-label">R</span>
+              <input class="rgb-val" id="s-r" type="number" min="0" max="255" value="124" />
+            </div>
+            <div class="rgb-input-group">
+              <span class="rgb-label">G</span>
+              <input class="rgb-val" id="s-g" type="number" min="0" max="255" value="106" />
+            </div>
+            <div class="rgb-input-group">
+              <span class="rgb-label">B</span>
+              <input class="rgb-val" id="s-b" type="number" min="0" max="255" value="247" />
+            </div>
+          </div>
+          <button class="win-accent-btn" id="btn-win-accent">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor"><rect x="0" y="0" width="6" height="6"/><rect x="7" y="0" width="6" height="6"/><rect x="0" y="7" width="6" height="6"/><rect x="7" y="7" width="6" height="6"/></svg>
+            Use Windows accent color
+          </button>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Preset themes</div>
+          <div class="theme-grid" id="s-theme-grid">
+            <div class="theme-chip selected" data-r="124" data-g="106" data-b="247">
+              <div class="theme-chip-preview" style="background:#16161a;"><div class="theme-dot" style="background:#7c6af7;"></div><div class="theme-dot" style="background:#2d2b36;"></div></div>
+              <div class="theme-chip-name">Violet</div>
+            </div>
+            <div class="theme-chip" data-r="29" data-g="158" data-b="117">
+              <div class="theme-chip-preview" style="background:#111815;"><div class="theme-dot" style="background:#1d9e75;"></div><div class="theme-dot" style="background:#1a2620;"></div></div>
+              <div class="theme-chip-name">Teal</div>
+            </div>
+            <div class="theme-chip" data-r="226" data-g="75" data-b="74">
+              <div class="theme-chip-preview" style="background:#180f0f;"><div class="theme-dot" style="background:#e24b4a;"></div><div class="theme-dot" style="background:#2a1212;"></div></div>
+              <div class="theme-chip-name">Crimson</div>
+            </div>
+            <div class="theme-chip" data-r="55" data-g="138" data-b="221">
+              <div class="theme-chip-preview" style="background:#0d1420;"><div class="theme-dot" style="background:#378add;"></div><div class="theme-dot" style="background:#152033;"></div></div>
+              <div class="theme-chip-name">Cobalt</div>
+            </div>
+            <div class="theme-chip" data-r="239" data-g="159" data-b="39">
+              <div class="theme-chip-preview" style="background:#15120a;"><div class="theme-dot" style="background:#ef9f27;"></div><div class="theme-dot" style="background:#2a2010;"></div></div>
+              <div class="theme-chip-name">Amber</div>
+            </div>
+            <div class="theme-chip" data-r="136" data-g="135" data-b="128">
+              <div class="theme-chip-preview" style="background:#111110;"><div class="theme-dot" style="background:#888780;"></div><div class="theme-dot" style="background:#222220;"></div></div>
+              <div class="theme-chip-name">Slate</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Idle mode</div>
+          <div class="oc-sublabel" style="margin-bottom:10px;">Hide UI after inactivity. The 3D scene stays visible. Set to 0 to disable.</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input class="rgb-val" id="s-idle-timeout" type="number" min="0" max="60" step="1" value="5" style="width:64px;" />
+            <span class="oc-sublabel">seconds (0 = never hide)</span>
+          </div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Overlay scale</div>
+          <div class="oc-row" style="border-bottom:none; padding-bottom:0;">
+            <div>
+              <div class="oc-label">Size</div>
+              <div class="oc-sublabel">Adjust the overlay size without dragging the window.</div>
+            </div>
+            <div class="oc-slider-wrap">
+              <input type="range" class="oc-slider" id="s-overlay-scale" min="0" max="100" value="50" />
+              <span class="oc-slider-val" id="s-overlay-scale-val">50</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Overlay indicators</div>
+          <div class="oc-row" style="border-bottom:none; padding-bottom:0;">
+            <div><div class="oc-label">Show active layer label</div><div class="oc-sublabel">Display the current runtime layer directly in the overlay.</div></div>
+            <label class="oc-toggle"><input type="checkbox" id="s-layer-vis" checked /><span class="oc-toggle-track"></span></label>
+          </div>
+        </div>
+
+        <div class="save-bar">
+          <span class="s-status hidden" id="status-themes"></span>
+        </div>
+      </div>
+
+      <!-- â•â•â•â• SANDBOX â•â•â•â• -->
+      <div class="oc-page" id="page-sandbox">
+        <div>
+          <div class="oc-page-title">Sandbox</div>
+          <div class="oc-page-sub">Your personal isolated Linux environment (Ubuntu 22.04 via WSL)</div>
+        </div>
+
+        <div class="oc-card" id="sandbox-status-card">
+          <div class="oc-section-title">Status</div>
+          <div class="sandbox-status-grid">
+            <div class="sandbox-status-row">
+              <span class="sandbox-status-label">WSL Available</span>
+              <span class="sandbox-badge" id="sandbox-badge-wsl">â€"</span>
+            </div>
+            <div class="sandbox-status-row">
+              <span class="sandbox-status-label">Sandbox Installed</span>
+              <span class="sandbox-badge" id="sandbox-badge-installed">â€"</span>
+            </div>
+            <div class="sandbox-status-row">
+              <span class="sandbox-status-label">Vault Mounted</span>
+              <span class="sandbox-badge" id="sandbox-badge-vault">â€"</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="oc-card">
+          <div class="oc-section-title">Actions</div>
+          <div class="sandbox-action-row">
+            <button class="oc-btn-primary" id="sandbox-provision-btn" type="button">Set Up Sandbox</button>
+            <button class="oc-btn-ghost" id="sandbox-verify-btn" type="button">Verify</button>
+            <button class="oc-btn-ghost" id="sandbox-reset-btn" type="button" style="color: var(--oc-danger, #e05c5c);">Reset Sandbox</button>
+          </div>
+          <pre id="sandbox-output" class="sandbox-output hidden"></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="oc-modal" id="memory-reset-modal">
+    <div class="oc-modal-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <div class="oc-section-title" style="margin:0;">Reset Memory</div>
+        <button class="btn-ghost" id="memory-reset-close" type="button">&#x2715;</button>
+      </div>
+      <div class="oc-modal-copy" id="memory-reset-confirm-copy">Are you sure you want to reset memory? This will clear long-term memory entries immediately.</div>
+      <div class="oc-modal-actions">
+        <button class="btn-ghost" id="memory-reset-cancel" type="button">Cancel</button>
+        <button class="btn-danger" id="memory-reset-confirm-btn" type="button">Reset memory</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-footer">
+    <div class="settings-footer-left"></div>
+    <div class="settings-footer-right">
+      <span id="settings-assets-footer"></span>
+      <span id="settings-updater-footer"></span>
+      <span class="s-status hidden" id="status-updater"></span>
+      <button class="btn-ghost" id="check-updates-btn" type="button">Check for updates</button>
+      <span id="settings-version-footer"></span>
+    </div>
+  </div>
+
+  <script type="module" src="./settings-renderer.js"></script>
+</body>
+</html>

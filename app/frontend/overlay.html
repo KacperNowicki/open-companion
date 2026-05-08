@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenCompanion</title>
+  <style>
+    :root {
+      /* dark mode defaults */
+      --bg-strong: rgba(10, 7, 20, 0.96);
+      --bg-soft: rgba(var(--accent-rgb), 0.10);
+      --panel-line: rgba(var(--accent-rgb), 0.18);
+      --panel-glow: rgba(var(--accent-rgb), 0.08);
+      --text-main: #f0eeff;
+      --text-muted: rgba(205, 198, 225, 0.82);
+      --shell-grad-a: rgba(16, 10, 28, 0.97);
+      --shell-grad-b: rgba(9, 7, 18, 0.98);
+      --shell-grad-c: rgba(5, 4, 12, 0.99);
+      --input-bg: rgba(10, 8, 18, 0.75);
+      --modal-bg: rgba(10, 9, 18, 0.97);
+      --dnd-bg: rgba(14, 21, 34, 0.97);
+      --control-track: rgba(255, 255, 255, 0.10);
+      --icon-default: rgba(235, 230, 218, 0.60);
+      --icon-hover-bg: rgba(255, 255, 255, 0.12);
+      --divider-color: rgba(255, 255, 255, 0.10);
+      --copy-btn-bg: rgba(255, 255, 255, 0.08);
+      --modal-pre-bg: rgba(255, 255, 255, 0.04);
+      --modal-pre-border: rgba(255, 255, 255, 0.08);
+      --deny-btn-bg: rgba(255, 255, 255, 0.08);
+      --history-meta-color: rgba(255, 255, 255, 0.42);
+      --history-close-color: rgba(255, 255, 255, 0.40);
+      --history-close-hover: #fff;
+      --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+      --placeholder-color: rgba(245, 247, 251, 0.48);
+      /* accent-rgb is updated live via theme:apply IPC */
+      --accent-rgb: 168, 85, 247;
+      --accent: rgb(var(--accent-rgb));
+      --accent-soft: rgba(var(--accent-rgb), 0.16);
+      --accent-glow: rgba(var(--accent-rgb), 0.18);
+      --accent-warm: rgba(var(--accent-rgb), 0.85);
+      --accent-mic-shadow: rgba(var(--accent-rgb), 0.38);
+      --accent-mic-shadow-hover: rgba(var(--accent-rgb), 0.55);
+      --accent-mic-shadow-listen: rgba(var(--accent-rgb), 0.12);
+      --accent-mic-shadow-listen2: rgba(var(--accent-rgb), 0.45);
+      --surface-glass: rgba(var(--accent-rgb), 0.10);
+      --surface-glass2: rgba(var(--accent-rgb), 0.16);
+      --danger: #f2a0a0;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.70), 0 4px 20px rgba(0, 0, 0, 0.45);
+      --radius: 28px;
+      --radius-sm: 18px;
+      --font-display: "Cinzel", "Trajan Pro", "Times New Roman", serif;
+      --font-ui: "Crimson Pro", "Georgia", "Times New Roman", serif;
+      --overlay-layout-width: 360px;
+      --overlay-layout-height: 516px;
+      --overlay-ui-scale: 1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      font-size: clamp(13px, 3.6vw, 17px);
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      display: grid;
+      place-items: start;
+      padding: 0;
+    }
+
+    .shell-viewport {
+      width: calc(var(--overlay-layout-width) * var(--overlay-ui-scale));
+      height: calc(var(--overlay-layout-height) * var(--overlay-ui-scale));
+      overflow: hidden;
+    }
+
+    .shell {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 222px auto auto;
+      align-content: space-between;
+      width: var(--overlay-layout-width);
+      height: var(--overlay-layout-height);
+      border: 1px solid var(--panel-line);
+      border-radius: var(--radius);
+      background:
+        radial-gradient(ellipse at 60% 0%, rgba(var(--accent-rgb), 0.16) 0%, transparent 50%),
+        radial-gradient(ellipse at 15% 100%, rgba(var(--accent-rgb), 0.08) 0%, transparent 45%),
+        linear-gradient(160deg, var(--shell-grad-a) 0%, var(--shell-grad-b) 60%, var(--shell-grad-c) 100%);
+      box-shadow: var(--shadow);
+      border-color: rgba(var(--accent-rgb), 0.22);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+      transform: scale(var(--overlay-ui-scale));
+      transform-origin: top left;
+    }
+
+    /* Subtle grain texture over the whole shell */
+    .shell::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+    }
+
+    /* Top edge glow highlight */
+    .shell::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      border-radius: 1px;
+      pointer-events: none;
+      z-index: 1;
+      background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.35) 30%, rgba(var(--accent-rgb), 0.55) 50%, rgba(var(--accent-rgb), 0.35) 70%, transparent);
+    }
+
+    .shell > * { position: relative; z-index: 2; }
+
+    /* ── Header — two-row stack ───────────────────────────────────────────── */
+    .header {
+      display: flex;
+      flex-direction: column;
+      padding: 4px 8px;
+      gap: 4px;
+      -webkit-app-region: drag;
+    }
+
+    .header-eyebrow-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 4px 0;
+      border-top: 1px solid var(--panel-line);
+      border-bottom: 1px solid var(--panel-line);
+    }
+
+    .header-main-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    /* Left: identity block */
+    .identity {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+      flex: 1;
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--text-main);
+      font-size: 11px;
+      font-family: var(--font-display);
+      letter-spacing: 0.18em;
+      line-height: 1;
+    }
+
+    .eyebrow-icon {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.28));
+    }
+
+    .eyebrow-text {
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .eyebrow-bold {
+      font-weight: 700;
+    }
+
+    .eyebrow-normal {
+      font-weight: 400;
+      opacity: 0.72;
+    }
+
+    .name {
+      font-size: clamp(20px, 5.5vw, 30px);
+      font-weight: 500;
+      font-family: var(--font-ui);
+      font-style: italic;
+      line-height: 1;
+      min-width: 0;
+      letter-spacing: 0.01em;
+      color: var(--text-main);
+    }
+
+    .state-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 4px;
+      align-self: flex-start;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--bg-soft);
+      border: 1px solid var(--panel-line);
+      color: var(--text-muted);
+      font-size: 9px;
+      font-family: var(--font-display);
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      white-space: nowrap;
+    }
+
+    /* State dot */
+    .state-chip::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(var(--accent-rgb), 0.45);
+      flex-shrink: 0;
+      transition: background 400ms ease;
+    }
+
+    .state-chip[data-state="idle"]::before,
+    .state-chip[data-state="ready"]::before {
+      background: rgba(80, 200, 130, 0.80);
+    }
+
+    .state-chip[data-state="busy"]::before,
+    .state-chip[data-state="thinking"]::before,
+    .state-chip[data-state="generating"]::before {
+      background: rgba(var(--accent-rgb), 0.90);
+      animation: dot-pulse 1.2s ease-in-out infinite;
+    }
+
+    .state-chip[data-state="listening"]::before {
+      background: rgba(100, 180, 255, 0.90);
+      animation: dot-pulse 0.9s ease-in-out infinite;
+    }
+
+    .state-chip[data-state="error"]::before {
+      background: rgba(220, 80, 80, 0.90);
+    }
+
+    @keyframes dot-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    /* Right: unified button group */
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+      background: rgba(var(--accent-rgb), 0.10);
+      border: 1px solid rgba(var(--accent-rgb), 0.20);
+      border-radius: 14px;
+      padding: 4px;
+    }
+
+    /* All header icon buttons share one style */
+    .header-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--icon-default);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+      flex-shrink: 0;
+    }
+
+    .header-btn:hover {
+      background: rgba(var(--accent-rgb), 0.16);
+      color: var(--text-main);
+    }
+
+    .header-btn:disabled {
+      opacity: 0.28;
+      cursor: not-allowed;
+    }
+
+    /* Thin vertical divider between button groups */
+    .header-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--divider-color);
+      flex-shrink: 0;
+      margin: 0 2px;
+    }
+
+    /* Minimize gets a subtly distinct tint */
+    .header-btn.btn-minimize:hover {
+      background: var(--icon-hover-bg);
+    }
+
+    /* PC Doctor retains its red accent but in the unified shape */
+    .header-btn.btn-pcdoctor {
+      color: rgba(220, 80, 80, 0.45);
+    }
+
+    .header-btn.btn-pcdoctor:hover {
+      background: rgba(220, 60, 60, 0.14);
+      color: rgba(220, 80, 80, 0.9);
+    }
+
+    .settings-button {
+      /* legacy alias — keep for JS selectors but style via .header-btn */
+      border-radius: 10px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      color: var(--icon-default);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+
+    .settings-button:hover {
+      background: rgba(var(--accent-rgb), 0.16);
+      color: var(--text-main);
+    }
+
+    .pc-doctor-button {
+      border-radius: 10px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      color: rgba(220, 80, 80, 0.45);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+
+    .pc-doctor-button:hover:not(:disabled) {
+      background: rgba(220, 60, 60, 0.14);
+      color: rgba(220, 80, 80, 0.9);
+    }
+
+    .pc-doctor-button:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
+
+    /* header-top is no longer a distinct element but keep rule for JS compat */
+    .header-top { display: contents; }
+
+    .pc-doctor-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(3, 6, 10, 0.5);
+      backdrop-filter: blur(10px);
+      -webkit-app-region: no-drag;
+    }
+
+    .pc-doctor-modal-backdrop.visible {
+      display: flex;
+    }
+
+    .pc-doctor-modal {
+      width: min(100%, 320px);
+      border-radius: 24px;
+      background: var(--modal-bg);
+      border: 1px solid rgba(255, 200, 100, 0.2);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .pc-doctor-modal h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .pc-doctor-modal p {
+      margin: 0 0 14px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    #pcDoctorInput {
+      width: 100%;
+      border: 1px solid var(--panel-line);
+      border-radius: 14px;
+      padding: 10px 14px;
+      background: var(--input-bg);
+      color: var(--text-main);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      outline: none;
+      resize: none;
+      user-select: text;
+      -webkit-app-region: no-drag;
+    }
+
+    #pcDoctorInput:focus {
+      border-color: rgba(255, 200, 100, 0.4);
+    }
+
+    #pcDoctorInput::placeholder {
+      color: rgba(245, 247, 251, 0.32);
+    }
+
+    .minimize-button {
+      border: 0;
+      border-radius: 10px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: transparent;
+      color: var(--icon-default);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 120ms ease, color 120ms ease;
+    }
+
+    .minimize-button:hover {
+      background: var(--icon-hover-bg);
+      color: var(--text-main);
+    }
+
+    .visual {
+      position: relative;
+      min-height: 0;
+      padding: 4px 8px;
+    }
+
+    #scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(var(--accent-rgb), 0.08), transparent 26%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      border: 1px solid var(--panel-line);
+      overflow: hidden;
+      /* Allow click events to reach JS (pointerdown idle-wake) instead of being
+         consumed by Electron as window drag — body and .shell both have drag region */
+      -webkit-app-region: no-drag;
+    }
+
+    #avatar-host {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #avatar-host canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100%;
+    }
+
+    .talking-head-figure {
+      position: relative;
+      width: min(62%, 170px);
+      aspect-ratio: 1 / 1.18;
+      display: grid;
+      place-items: center;
+      transform: translateY(8px);
+      transition: transform 180ms ease, filter 180ms ease;
+    }
+
+    .talking-head-aura {
+      position: absolute;
+      inset: 6%;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 48% 38%, rgba(var(--accent-rgb), 0.32), transparent 44%),
+        radial-gradient(circle at 50% 56%, rgba(105, 211, 200, 0.14), transparent 58%);
+      filter: blur(2px);
+      opacity: 0.72;
+    }
+
+    .talking-head-face {
+      position: relative;
+      width: 58%;
+      aspect-ratio: 1 / 1.12;
+      border-radius: 48% 48% 44% 44%;
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.28), transparent 18%),
+        linear-gradient(160deg, rgba(var(--accent-rgb), 0.86), rgba(105, 211, 200, 0.62));
+      box-shadow:
+        inset 0 1px 12px rgba(255, 255, 255, 0.16),
+        0 18px 42px rgba(var(--accent-rgb), 0.22);
+    }
+
+    .talking-head-eye,
+    .talking-head-mouth {
+      position: absolute;
+      display: block;
+      background: rgba(4, 7, 13, 0.72);
+    }
+
+    .talking-head-eye {
+      top: 38%;
+      width: 9%;
+      height: 9%;
+      border-radius: 50%;
+    }
+
+    .talking-head-eye-left { left: 32%; }
+    .talking-head-eye-right { right: 32%; }
+
+    .talking-head-mouth {
+      left: 38%;
+      bottom: 28%;
+      width: 24%;
+      height: 5%;
+      border-radius: 999px;
+      transform-origin: center;
+    }
+
+    .talking-head-host.is-listening .talking-head-figure {
+      transform: translateY(0) scale(1.02);
+      filter: drop-shadow(0 0 18px rgba(100, 180, 255, 0.32));
+    }
+
+    .talking-head-host.is-speaking .talking-head-figure {
+      animation: talking-head-bob 780ms ease-in-out infinite;
+      filter: drop-shadow(0 0 20px rgba(var(--accent-rgb), 0.36));
+    }
+
+    .talking-head-host.is-speaking .talking-head-mouth {
+      animation: talking-head-mouth 140ms ease-in-out infinite alternate;
+    }
+
+    @keyframes talking-head-bob {
+      0%, 100% { transform: translateY(5px) scale(1); }
+      50% { transform: translateY(-2px) scale(1.025); }
+    }
+
+    @keyframes talking-head-mouth {
+      from { height: 5%; transform: scaleX(1); }
+      to { height: 13%; transform: scaleX(0.82); }
+    }
+
+    .response {
+      padding: 4px 8px;
+      /* Establish stacking context at grid-item level so the expanded history
+         panel renders above the .visual grid row.
+         .visual has position:relative but no z-index, so z-index:2 here wins. */
+      position: relative;
+      z-index: 2;
+    }
+
+    .response-card {
+      position: relative;
+      min-height: clamp(72px, 12vh, 100px);
+      max-height: clamp(120px, 24vh, 200px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 6px 10px;
+      border-radius: 22px;
+      background: var(--surface-glass);
+      border: 1px solid rgba(var(--accent-rgb), 0.30);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 4px 20px rgba(0, 0, 0, 0.30);
+    }
+
+    .response-actions {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+
+    .copy-button {
+      border: 0;
+      border-radius: 12px;
+      padding: 7px 10px;
+      min-width: 72px;
+      background: var(--copy-btn-bg);
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: background 140ms ease, transform 140ms ease;
+    }
+
+    .copy-button:hover:not(:disabled) {
+      background: rgba(var(--accent-rgb), 0.22);
+      transform: translateY(-1px);
+    }
+
+    .copy-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .response-label {
+      display: none;
+    }
+
+    .response-text {
+      margin: 0;
+      font-size: clamp(13px, 3.4vw, 16px);
+      line-height: 1.52;
+      color: var(--text-main);
+      white-space: pre-wrap;
+      user-select: text;
+      cursor: text;
+      -webkit-app-region: no-drag;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+
+    .controls {
+      --mic-size: clamp(48px, 13vw, 68px);
+      display: grid;
+      grid-template-columns: var(--mic-size) minmax(0, 1fr);
+      grid-template-areas:
+        "mic input"
+        "footnote footnote";
+      gap: 8px 12px;
+      padding: 4px 8px;
+      align-items: end;
+    }
+
+    .mic-button {
+      grid-area: mic;
+      display: grid;
+      place-items: center;
+      -webkit-app-region: no-drag;
+      width: var(--mic-size);
+      height: var(--mic-size);
+      aspect-ratio: 1 / 1;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.32), transparent 45%),
+        linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
+      color: #fff;
+      font-size: clamp(16px, 4.5vw, 24px);
+      box-shadow: 0 12px 30px var(--accent-mic-shadow);
+      opacity: 0.72;
+      cursor: pointer;
+      transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+    }
+
+    .mic-button.is-ready {
+      opacity: 0.96;
+    }
+
+    .mic-button.is-ready:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 36px var(--accent-mic-shadow-hover);
+    }
+
+    .mic-button.is-listening {
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.4), transparent 45%),
+        linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 80%, #000));
+      box-shadow: 0 0 0 8px var(--accent-mic-shadow-listen), 0 16px 40px var(--accent-mic-shadow-listen2);
+    }
+
+    .mic-button.is-speaking {
+      box-shadow: 0 0 0 6px rgba(115, 180, 255, 0.1), 0 14px 34px rgba(89, 151, 230, 0.34);
+    }
+
+    .mic-button:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .input-panel {
+      grid-area: input;
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .input-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      -webkit-app-region: no-drag;
+    }
+
+    .input-meta-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .input-label {
+      display: none;
+    }
+
+    .layer-select {
+      border: 1px solid var(--panel-line);
+      border-radius: 12px;
+      padding: 6px 11px;
+      background: var(--input-bg);
+      color: var(--text-main);
+      font-size: 13px;
+      font-family: var(--font-ui);
+      outline: none;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+
+    .layer-select:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .reasoning-wrap {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .reasoning-wrap.visible {
+      display: flex;
+    }
+
+    .reasoning-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-family: var(--font-display);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .reasoning-select {
+      min-width: 118px;
+      max-width: 148px;
+    }
+
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 6px 6px 4px;
+      border-radius: 20px;
+      background: rgba(var(--accent-rgb), 0.07);
+      border: 1px solid var(--panel-line);
+      box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.12);
+      -webkit-app-region: no-drag;
+    }
+
+    #textInput {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text-main);
+      font-size: 1em;
+      font-family: var(--font-ui);
+      padding: 8px 12px;
+    }
+
+    #textInput::placeholder {
+      color: var(--placeholder-color);
+      font-style: italic;
+    }
+
+    .send-button {
+      -webkit-app-region: no-drag;
+      border: 0;
+      border-radius: 14px;
+      padding: 0;
+      width: 42px;
+      flex-shrink: 0;
+      background: var(--accent-soft);
+      color: var(--text-main);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 120ms ease;
+    }
+
+    .send-button:hover:not(:disabled) {
+      background: rgba(var(--accent-rgb), 0.28);
+    }
+
+    .send-button:disabled,
+    #textInput:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .footnote {
+      grid-area: footnote;
+      color: var(--text-muted);
+      font-size: 0.95em;
+      font-style: italic;
+      line-height: 1.4;
+      padding-left: calc(var(--mic-size, 56px) + 12px);
+    }
+
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(3, 6, 10, 0.5);
+      backdrop-filter: blur(10px);
+      -webkit-app-region: no-drag;
+    }
+
+    .modal-backdrop.visible {
+      display: flex;
+    }
+
+    .modal {
+      width: min(100%, 320px);
+      border-radius: 24px;
+      background: var(--modal-bg);
+      border: 1px solid var(--panel-line);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .modal h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+    }
+
+    .modal p {
+      margin: 0 0 12px;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .modal pre {
+      margin: 0;
+      padding: 12px;
+      max-height: 180px;
+      overflow: auto;
+      border-radius: 16px;
+      background: var(--modal-pre-bg);
+      border: 1px solid var(--modal-pre-border);
+      color: var(--text-main);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .action-button {
+      -webkit-app-region: no-drag;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .action-deny {
+      background: var(--deny-btn-bg);
+      color: var(--text-main);
+    }
+
+    .action-approve {
+      background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 80%, #000));
+      color: #fff;
+    }
+
+    .error-text {
+      color: var(--danger);
+    }
+
+    #startup-banners {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 29;
+      pointer-events: none;
+    }
+
+    .startup-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(12, 8, 0, 0.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-left: 3px solid #f0a000;
+      border-radius: 6px;
+      pointer-events: all;
+      animation: banner-in 0.2s ease-out forwards;
+      -webkit-app-region: no-drag;
+    }
+
+    .startup-banner.dismissing {
+      animation: banner-out 0.15s ease-in forwards;
+    }
+
+    @keyframes banner-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes banner-out {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(-4px); }
+    }
+
+    .startup-banner-icon {
+      flex-shrink: 0;
+      color: #f0a000;
+      font-size: 13px;
+      margin-top: 1px;
+    }
+
+    .startup-banner-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .startup-banner-label {
+      color: #f5e0b0;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .startup-banner-hint {
+      color: #b08a50;
+      font-size: 12px;
+      font-family: Consolas, "Courier New", monospace;
+      line-height: 1.45;
+    }
+
+    .startup-banner-dismiss {
+      flex-shrink: 0;
+      background: none;
+      border: 0;
+      color: #7a5a30;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      align-self: flex-start;
+      transition: color 120ms ease;
+    }
+
+    .startup-banner-dismiss:hover {
+      color: #f5e0b0;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .banner-action-btn,
+    .banner-dismiss-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+      border-radius: 10px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 11px;
+      -webkit-app-region: no-drag;
+    }
+
+    .banner-action-btn:hover,
+    .banner-dismiss-btn:hover {
+      background: rgba(var(--accent-rgb), 0.18);
+    }
+
+    /* Layer status — glow on companion view */
+    #scene {
+      transition: opacity 0.25s ease, filter 0.4s ease;
+    }
+
+    #scene.layer-pcdoctor {
+      animation: pulse-pcdoctor 1.6s ease-in-out infinite;
+      filter: drop-shadow(0 0 18px rgba(240, 160, 0, 0.6));
+    }
+
+    @keyframes pulse-pcdoctor {
+      0%, 100% { filter: drop-shadow(0 0 14px rgba(240, 160, 0, 0.45)); }
+      50%       { filter: drop-shadow(0 0 32px rgba(240, 160, 0, 0.85)); }
+    }
+
+    #layer-label {
+      display: none;
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: rgba(4, 7, 13, 0.72);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 30;
+    }
+
+    /* History toggle button */
+    /* history-toggle-button now inherits .header-btn — no extra rules needed */
+    .history-toggle-button { }
+
+    /* Reply box — merged latest reply + history panel */
+    #replyBox {
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      /* Ensure the card forms its own stacking context so it sits above scene elements */
+      position: relative;
+      z-index: 10;
+    }
+
+    #replyBox.history-open {
+      max-height: 400px;
+    }
+
+    #reply-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    #history-close-btn {
+      background: none;
+      border: none;
+      color: var(--history-close-color);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+    }
+
+    #history-close-btn:hover {
+      color: var(--history-close-hover);
+    }
+
+    #history-messages {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 6px;
+      max-height: 340px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+      /* Allow native scrollbar thumb dragging — overrides inherited app-region:drag */
+      -webkit-app-region: no-drag;
+    }
+
+    .history-entry {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .history-entry-meta {
+      font-size: 11px;
+      font-family: var(--font-display);
+      letter-spacing: 0.08em;
+      color: var(--history-meta-color);
+    }
+
+    .history-entry-meta .speaker-nova {
+      color: var(--accent, rgba(255, 255, 255, 0.5));
+    }
+
+    .history-entry-text {
+      font-size: 15px;
+      color: rgba(245, 240, 232, 0.90);
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .history-entry.entry-you {
+      align-items: flex-end;
+    }
+
+    .history-entry.entry-you .history-entry-text {
+      color: rgba(255, 255, 255, 0.68);
+      font-style: italic;
+    }
+
+    /* DND button — now inherits .header-btn */
+    .dnd-button {
+      position: relative;
+    }
+
+    .dnd-button.dnd-active {
+      background: rgba(242, 160, 0, 0.18);
+      color: #f0a000;
+    }
+
+    .dnd-button.dnd-active:hover {
+      background: rgba(242, 160, 0, 0.28);
+    }
+
+    .dnd-wrapper {
+      position: relative;
+      -webkit-app-region: no-drag;
+    }
+
+    .dnd-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 140px;
+      border-radius: 14px;
+      background: var(--dnd-bg);
+      border: 1px solid var(--panel-line);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+      padding: 6px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 50;
+      -webkit-app-region: no-drag;
+    }
+
+    .dnd-dropdown.open {
+      display: flex;
+    }
+
+    .dnd-option {
+      border: 0;
+      border-radius: 10px;
+      padding: 8px 12px;
+      background: transparent;
+      color: var(--text-main);
+      font-size: 14px;
+      font-family: var(--font-ui);
+      text-align: left;
+      cursor: pointer;
+      transition: background 100ms ease;
+      white-space: nowrap;
+      -webkit-app-region: no-drag;
+    }
+
+    .dnd-option:hover {
+      background: rgba(var(--accent-rgb), 0.15);
+    }
+
+    .dnd-option.dnd-cancel-option {
+      color: #f0a000;
+    }
+
+    .dnd-custom-row {
+      display: flex;
+      gap: 4px;
+      padding: 4px 4px 4px 4px;
+      -webkit-app-region: no-drag;
+    }
+
+    #dndCustomInput {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--panel-line);
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: var(--input-bg);
+      color: var(--text-main);
+      font-size: 12px;
+      font-family: var(--font-ui);
+      outline: none;
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+
+    #dndCustomInput:focus {
+      border-color: rgba(var(--accent-rgb), 0.5);
+    }
+
+    #dndCustomGo {
+      border: 0;
+      border-radius: 8px;
+      padding: 6px 10px;
+      background: var(--accent-soft);
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+
+    .dnd-timer {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      color: #f0a000;
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    /* ── Idle mode ─────────────────────────────────────────────────────────── */
+    .shell > .header,
+    .shell > .response,
+    .shell > .controls {
+      transition: opacity 150ms ease;
+    }
+
+    .shell {
+      transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, backdrop-filter 150ms ease;
+    }
+
+    body.idle .shell > .header,
+    body.idle .shell > .response,
+    body.idle .shell > .controls {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    body.idle .shell {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+
+    body.idle .modal-backdrop,
+    body.idle .pc-doctor-modal-backdrop {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    body.idle #history-overlay {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 150ms ease;
+    }
+
+    /* ── History overlay — floats above the scene ───────────────────────── */
+    #history-overlay {
+      display: none;
+      position: absolute;
+      /* sit inside the .shell stacking context, above scene z-indices */
+      bottom: 0;
+      left: 0;
+      right: 0;
+      /* height covers from bottom up to just below the header */
+      max-height: calc(100% - 90px);
+      z-index: 60;
+      padding: 0 18px 18px;
+      pointer-events: none;
+    }
+
+    #history-overlay.open {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    #history-overlay-inner {
+      background: var(--modal-bg);
+      border: 1px solid var(--panel-line);
+      border-radius: 22px;
+      padding: 14px 16px 16px;
+      max-height: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: all;
+      -webkit-app-region: no-drag;
+    }
+
+    #history-overlay-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    #history-overlay-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-family: var(--font-display);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    #history-overlay-close {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+      -webkit-app-region: no-drag;
+    }
+
+    #history-overlay-close:hover {
+      color: #fff;
+    }
+
+    #history-overlay-messages {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ── Vision / clipboard paste UI ─────────────────────────────────────── */
+    #image-preview-strip { padding: 4px 8px; }
+    #image-preview-thumb { height: 48px; border-radius: 4px; border: 1px solid var(--panel-line); }
+    #image-preview-item { display: inline-flex; align-items: center; gap: 4px; }
+    #image-preview-remove {
+      background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1;
+    }
+    #image-preview-remove:hover { color: #f87171; }
+
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "@met4citizen/talkinghead": "../../node_modules/@met4citizen/talkinghead/modules/talkinghead.mjs",
+        "three": "../../node_modules/three/build/three.module.js",
+        "three/addons/": "../../node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="shell-viewport">
+  <main class="shell">
+    <div class="header">
+      <!-- Top: branding centered -->
+      <div class="header-eyebrow-row">
+        <div class="eyebrow">
+          <img class="eyebrow-icon" src="assets/brand/icon.png" alt="" aria-hidden="true">
+          <span class="eyebrow-text"><span class="eyebrow-bold">Open</span><span class="eyebrow-normal"> Companion</span></span>
+        </div>
+      </div>
+
+      <!-- Bottom: name left, buttons right -->
+      <div class="header-main-row">
+        <div class="identity">
+          <div class="name" id="companionName">Nova</div>
+          <div class="state-chip" id="stateChip">Starting</div>
+        </div>
+
+      <!-- Right: unified button pill -->
+      <div class="header-actions">
+        <!-- DND -->
+        <div class="dnd-wrapper" id="dndWrapper">
+          <button class="header-btn dnd-button" id="dndButton" type="button" title="Do Not Disturb" aria-label="Do Not Disturb">
+            <!-- clock icon -->
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4" fill="none"/>
+              <path d="M8 4.5v3.75l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+            </svg>
+            <span class="dnd-timer" id="dndTimer" style="display:none"></span>
+          </button>
+          <div class="dnd-dropdown" id="dndDropdown">
+            <button class="dnd-option" data-minutes="15">15 minutes</button>
+            <button class="dnd-option" data-minutes="30">30 minutes</button>
+            <button class="dnd-option" data-minutes="60">1 hour</button>
+            <div class="dnd-custom-row">
+              <input id="dndCustomInput" type="number" min="1" max="480" placeholder="min" aria-label="Custom minutes" />
+              <button id="dndCustomGo" type="button">Go</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <button class="header-btn history-toggle-button" id="historyToggleButton" type="button" title="Conversation history" aria-label="Conversation history">
+          <!-- speech bubble / history icon -->
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 2.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5.5l-3 2.5V3.5a1 1 0 0 1 1-1z"/>
+          </svg>
+        </button>
+
+        <button class="header-btn" id="nav-close-session" type="button" title="Close session" aria-label="Close session">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4l8 8M12 4 4 12"/>
+          </svg>
+        </button>
+
+        <div class="header-divider"></div>
+
+        <!-- PC Doctor -->
+        <button class="header-btn btn-pcdoctor pc-doctor-button" id="pcDoctorButton" type="button" title="PC Doctor" aria-label="PC Doctor">
+          <!-- terminal / stethoscope icon -->
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/>
+            <path d="M4 14h8M8 11.5V14"/>
+            <path d="M4 6l2 2-2 2"/>
+            <path d="M9 10h3"/>
+          </svg>
+        </button>
+
+        <div class="header-divider"></div>
+
+        <!-- Settings -->
+        <button class="header-btn settings-button" id="settingsButton" type="button" title="Settings">
+          <!-- gear icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+
+        <!-- Minimize -->
+        <button class="header-btn btn-minimize minimize-button" id="minimizeButton" type="button" title="Minimize" aria-label="Minimize">
+          <!-- minus line -->
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <line x1="3.5" y1="8" x2="12.5" y2="8"/>
+          </svg>
+        </button>
+      </div>
+      </div><!-- /.header-main-row -->
+    </div>
+
+    <section class="visual">
+      <div id="scene">
+        <div id="avatar-host"></div>
+        <div id="startup-banners"></div>
+        <div id="update-banner" class="startup-banner hidden" style="border-left-color: rgba(99,179,237,0.8);">
+          <div class="startup-banner-body">
+            <div class="startup-banner-label" id="update-banner-text">Update available</div>
+          </div>
+          <button id="update-download-btn" class="banner-action-btn" type="button">Download</button>
+          <button id="update-dismiss-btn" class="banner-dismiss-btn" type="button">×</button>
+        </div>
+        <div id="update-progress-banner" class="startup-banner hidden" style="border-left-color: rgba(99,179,237,0.8);">
+          <div class="startup-banner-body">
+            <div class="startup-banner-label" id="update-progress-text">Downloading update... 0%</div>
+          </div>
+        </div>
+        <div id="update-ready-banner" class="startup-banner hidden" style="border-left-color: rgba(72,187,120,0.8);">
+          <div class="startup-banner-body">
+            <div class="startup-banner-label">Update downloaded. Restart to apply.</div>
+          </div>
+          <button id="update-install-btn" class="banner-action-btn" type="button">Restart</button>
+          <button id="update-ready-dismiss-btn" class="banner-dismiss-btn" type="button">×</button>
+        </div>
+        <div id="layer-label"></div>
+      </div>
+    </section>
+
+    <section class="response">
+      <div class="response-card" id="replyBox">
+        <div id="reply-header">
+          <span id="reply-label" class="response-label">LATEST REPLY</span>
+          <div class="response-actions">
+            <button class="copy-button" id="copyResponseButton" type="button" aria-label="Copy latest reply">Copy</button>
+            <button id="history-close-btn" type="button" style="display:none" aria-label="Close history">×</button>
+          </div>
+        </div>
+        <p class="response-text" id="responseText">Booting up...</p>
+        <div id="history-messages" style="display:none"></div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button class="mic-button" id="micButton" type="button" title="Tap to talk">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8" y1="22" x2="16" y2="22"/>
+        </svg>
+      </button>
+
+        <div class="input-panel">
+          <div class="input-meta">
+            <div class="input-label">Talk or type</div>
+            <div class="input-meta-controls">
+              <div id="reasoningWrap" class="reasoning-wrap" aria-live="polite">
+                <span class="reasoning-label">Thinking</span>
+                <select id="reasoningEffortSelect" class="layer-select reasoning-select" aria-label="Reasoning effort">
+                  <option value="">Auto</option>
+                </select>
+              </div>
+              <select id="targetLayerSelect" class="layer-select" aria-label="Target layer">
+                <option value="companion">Companion</option>
+                <option value="assistant">Assistant</option>
+              </select>
+            </div>
+          </div>
+        <div id="image-preview-strip" style="display:none">
+          <div id="image-preview-item">
+            <img id="image-preview-thumb" src="" alt="pasted image" />
+            <button id="image-preview-remove" type="button" title="Remove image">×</button>
+          </div>
+        </div>
+        <form class="input-row" id="messageForm">
+          <input id="textInput" type="text" autocomplete="off" placeholder="Say something..." />
+<button class="send-button" id="sendButton" type="submit" title="Send" aria-label="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      <div class="footnote" id="footnote">Tap the mic to talk, or type if you want silence.</div>
+    </section>
+
+    <!-- History overlay — absolute, z:60, above scene -->
+    <div id="history-overlay">
+      <div id="history-overlay-inner">
+        <div id="history-overlay-header">
+          <span id="history-overlay-label" class="response-label">CONVERSATION HISTORY</span>
+          <button id="history-overlay-close" type="button" aria-label="Close history">×</button>
+        </div>
+        <div id="history-overlay-messages"></div>
+      </div>
+    </div>
+
+    <div class="pc-doctor-modal-backdrop" id="pcDoctorModalBackdrop">
+      <div class="pc-doctor-modal">
+        <h2>🔧 PC Doctor</h2>
+        <p>Describe the system issue or diagnostic task. PC Doctor runs with elevated permissions — tool actions still require your approval.</p>
+        <form id="pcDoctorForm">
+          <textarea id="pcDoctorInput" rows="3" placeholder="e.g. Check what's using the most CPU, or diagnose why my network is slow..." maxlength="800"></textarea>
+          <div class="modal-actions">
+            <button class="action-button action-deny" id="pcDoctorCancelButton" type="button">Cancel</button>
+            <button class="action-button action-approve" id="pcDoctorSubmitButton" type="submit">Summon</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="modalBackdrop">
+      <div class="modal">
+        <h2>Approve action</h2>
+        <p id="modalDescription">Nova wants to use a tool.</p>
+        <pre id="modalArguments"></pre>
+        <div class="modal-actions">
+          <button class="action-button action-deny" id="denyButton" type="button">Deny</button>
+          <button class="action-button action-approve" id="approveButton" type="button">Approve</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  </div>
+
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>

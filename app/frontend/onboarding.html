@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' file: blob:;">
+  <title>OpenCompanion Setup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --oc-accent-rgb: 168, 85, 247;
+      --oc-bg:         #0a0714;
+      --oc-surface:    rgba(var(--oc-accent-rgb), 0.08);
+      --oc-surface2:   rgba(var(--oc-accent-rgb), 0.13);
+      --oc-surface3:   rgba(var(--oc-accent-rgb), 0.20);
+      --oc-border:     rgba(var(--oc-accent-rgb), 0.18);
+      --oc-text:       #f0eeff;
+      --oc-muted:      rgba(205, 198, 225, 0.72);
+      --oc-accent:     rgb(var(--oc-accent-rgb));
+      --oc-danger:     #f2a0a0;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background:
+        radial-gradient(ellipse at 65% 0%, rgba(var(--oc-accent-rgb), 0.14) 0%, transparent 50%),
+        radial-gradient(ellipse at 10% 100%, rgba(var(--oc-accent-rgb), 0.07) 0%, transparent 45%),
+        linear-gradient(160deg, #100c1e 0%, #090714 60%, #050410 100%);
+      min-height: 100vh;
+      font-family: "Crimson Pro", Georgia, serif;
+      color: var(--oc-text);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    input,
+    textarea,
+    button,
+    select {
+      font: inherit;
+    }
+
+    input,
+    textarea {
+      user-select: text;
+    }
+
+    .oc-titlebar {
+      height: 33px;
+      background: rgba(var(--oc-accent-rgb), 0.06);
+      border-bottom: 1px solid rgba(var(--oc-accent-rgb), 0.18);
+      -webkit-app-region: drag;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px 0 16px;
+      flex-shrink: 0;
+    }
+
+    .oc-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-family: "Cinzel", serif;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--oc-text);
+    }
+
+    .oc-brand-icon {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 0 8px rgba(var(--oc-accent-rgb), 0.25));
+    }
+
+    .oc-brand-text { white-space: nowrap; }
+    .oc-brand strong { font-weight: 700; }
+    .oc-brand span { font-weight: 400; opacity: 0.72; }
+
+    .oc-close {
+      -webkit-app-region: no-drag;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--oc-muted);
+      font-size: 13px;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 120ms, color 120ms;
+    }
+
+    .oc-close:hover { background: rgba(255,80,80,0.18); color: #ff6060; }
+
+    .wizard-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      min-height: calc(100vh - 33px);
+    }
+
+    .wizard-card {
+      position: relative;
+      background: rgba(var(--oc-accent-rgb), 0.07);
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.22);
+      border-radius: 22px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.07),
+                  0 32px 80px rgba(0,0,0,0.60);
+      padding: 32px 36px 28px;
+      width: 560px;
+      max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(var(--oc-accent-rgb), 0.18) transparent;
+      margin: auto;
+    }
+
+    .wizard-card-shimmer {
+      position: absolute;
+      top: 0;
+      left: 10%;
+      right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg,
+        transparent,
+        rgba(var(--oc-accent-rgb), 0.45) 30%,
+        rgba(var(--oc-accent-rgb), 0.70) 50%,
+        rgba(var(--oc-accent-rgb), 0.45) 70%,
+        transparent);
+      border-radius: 1px;
+    }
+
+    .wizard-brand-mark {
+      display: block;
+      width: 54px;
+      height: 54px;
+      object-fit: contain;
+      margin: 0 auto 18px;
+      filter: drop-shadow(0 0 18px rgba(var(--oc-accent-rgb), 0.28));
+    }
+
+    .step-dots {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+
+    .step-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(var(--oc-accent-rgb), 0.22);
+      transition: background 300ms, transform 300ms;
+    }
+
+    .step-dot.active {
+      background: var(--oc-accent);
+      transform: scale(1.3);
+    }
+
+    .step-dot.done {
+      background: rgba(var(--oc-accent-rgb), 0.55);
+    }
+
+    .step-eyebrow {
+      font-family: "Cinzel", serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--oc-accent);
+      opacity: 0.85;
+      margin-bottom: 8px;
+    }
+
+    .step-title {
+      font-family: "Cinzel", serif;
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--oc-text);
+      margin-bottom: 10px;
+      line-height: 1.25;
+    }
+
+    .step-body {
+      font-family: "Crimson Pro", serif;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--oc-muted);
+      margin-bottom: 24px;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field.span-2 { grid-column: 1 / -1; }
+
+    .field label,
+    .section-label {
+      font-family: "Cinzel", serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--oc-muted);
+    }
+
+    .oc-input,
+    .oc-textarea,
+    .oc-select {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(10, 7, 20, 0.75);
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.18);
+      border-radius: 10px;
+      color: var(--oc-text);
+      font-family: "Crimson Pro", serif;
+      font-size: 14px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.16s, box-shadow 0.16s;
+    }
+
+    .oc-textarea {
+      min-height: 100px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .oc-select {
+      appearance: none;
+      background:
+        linear-gradient(45deg, transparent 50%, rgba(var(--oc-accent-rgb), 0.82) 50%) calc(100% - 17px) 50% / 6px 6px no-repeat,
+        linear-gradient(135deg, rgba(var(--oc-accent-rgb), 0.82) 50%, transparent 50%) calc(100% - 12px) 50% / 6px 6px no-repeat,
+        rgba(10, 7, 20, 0.75);
+      padding-right: 34px;
+    }
+
+    .oc-input:focus,
+    .oc-textarea:focus,
+    .oc-select:focus {
+      border-color: rgba(var(--oc-accent-rgb), 0.60);
+      box-shadow: 0 0 0 2px rgba(var(--oc-accent-rgb), 0.14);
+    }
+
+    .oc-input::placeholder,
+    .oc-textarea::placeholder {
+      color: rgba(205, 198, 225, 0.40);
+      font-style: italic;
+    }
+
+    .btn-accent {
+      background: rgba(var(--oc-accent-rgb), 0.90);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 24px;
+      cursor: pointer;
+      font-family: "Cinzel", serif;
+      font-size: 10px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      box-shadow: 0 6px 20px rgba(var(--oc-accent-rgb), 0.32);
+      transition: background 130ms, box-shadow 130ms;
+    }
+
+    .btn-accent:hover {
+      background: rgb(var(--oc-accent-rgb));
+      box-shadow: 0 8px 28px rgba(var(--oc-accent-rgb), 0.48);
+    }
+
+    .btn-accent:disabled {
+      opacity: 0.45;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.18);
+      color: var(--oc-muted);
+      border-radius: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-family: "Cinzel", serif;
+      font-size: 10px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      transition: border-color 130ms, background 130ms, color 130ms;
+    }
+
+    .btn-ghost:hover {
+      border-color: rgba(var(--oc-accent-rgb), 0.35);
+      background: rgba(var(--oc-accent-rgb), 0.07);
+      color: var(--oc-text);
+    }
+
+    .btn-ghost:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .btn-wide { width: 100%; }
+    .link-ghost {
+      background: transparent;
+      border: 0;
+      color: var(--oc-muted);
+      cursor: pointer;
+      font-family: "Crimson Pro", serif;
+      font-size: 13px;
+      font-style: italic;
+      padding: 8px 0 0;
+    }
+    .link-ghost:hover { color: var(--oc-text); }
+
+    .select-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .select-grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .select-card {
+      background: rgba(10, 7, 20, 0.55);
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.18);
+      border-radius: 14px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color 150ms, background 150ms, transform 150ms, box-shadow 150ms;
+      text-align: left;
+      color: inherit;
+    }
+
+    .select-card:hover {
+      border-color: rgba(var(--oc-accent-rgb), 0.40);
+      transform: translateY(-1px);
+    }
+
+    .select-card.selected {
+      border-color: var(--oc-accent);
+      background: rgba(var(--oc-accent-rgb), 0.12);
+      box-shadow: 0 0 0 1px rgba(var(--oc-accent-rgb), 0.20);
+    }
+
+    .select-card-title {
+      font-family: "Cinzel", serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--oc-text);
+      margin-bottom: 4px;
+    }
+
+    .select-card-body {
+      font-family: "Crimson Pro", serif;
+      font-size: 13px;
+      font-style: italic;
+      color: var(--oc-muted);
+      line-height: 1.5;
+    }
+
+    .model-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.18);
+      border-radius: 12px;
+      background: rgba(10, 7, 20, 0.55);
+      cursor: pointer;
+      transition: border-color 150ms, background 150ms;
+      margin-bottom: 8px;
+    }
+
+    .model-row:hover { border-color: rgba(var(--oc-accent-rgb), 0.38); }
+    .model-row.selected {
+      border-color: var(--oc-accent);
+      background: rgba(var(--oc-accent-rgb), 0.10);
+    }
+    .model-row.disabled {
+      cursor: default;
+      opacity: 0.78;
+    }
+
+    .model-row-radio {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: 2px solid rgba(var(--oc-accent-rgb), 0.40);
+      background: transparent;
+      transition: border-color 150ms, background 150ms;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .model-row.selected .model-row-radio {
+      border-color: var(--oc-accent);
+      background: rgba(var(--oc-accent-rgb), 0.80);
+    }
+
+    .model-row.selected .model-row-radio::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .model-row-info { flex: 1; min-width: 0; }
+    .model-row-name {
+      font-family: "Cinzel", serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--oc-text);
+    }
+
+    .model-row-desc {
+      font-family: "Crimson Pro", serif;
+      font-size: 13px;
+      font-style: italic;
+      color: var(--oc-muted);
+      margin-top: 2px;
+    }
+
+    .model-row-badge {
+      font-family: "Cinzel", serif;
+      font-size: 9px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(var(--oc-accent-rgb), 0.12);
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.25);
+      color: var(--oc-muted);
+      flex-shrink: 0;
+    }
+
+    .model-row-badge.already-downloaded {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.30);
+      color: #86efac;
+    }
+
+    .download-progress-wrap { margin-top: 20px; }
+    .download-progress-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+    .download-progress-name {
+      font-family: "Cinzel", serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--oc-text);
+    }
+    .download-progress-pct {
+      font-family: "Crimson Pro", serif;
+      font-size: 13px;
+      color: var(--oc-muted);
+    }
+    .download-progress-track {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(var(--oc-accent-rgb), 0.12);
+      overflow: hidden;
+    }
+    .download-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--oc-accent);
+      transition: width 0.2s ease;
+      width: 0%;
+    }
+    .download-status-chip {
+      margin-top: 10px;
+      font-family: "Cinzel", serif;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--oc-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .download-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(var(--oc-accent-rgb), 0.50);
+      animation: dot-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes dot-pulse { 0%,100% { opacity:1; } 50% { opacity:0.30; } }
+    .download-status-dot.done { background: #22c55e; animation: none; }
+    .download-status-dot.error { background: #f2a0a0; animation: none; }
+
+    .voice-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .voice-group {
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.12);
+      border-radius: 14px;
+      background: rgba(10, 7, 20, 0.28);
+      overflow: hidden;
+    }
+    .voice-group-header {
+      width: 100%;
+      background: transparent;
+      border: 0;
+      color: var(--oc-muted);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 11px 13px;
+      font-family: "Cinzel", serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .voice-group-grid {
+      display: none;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 9px;
+      padding: 0 12px 12px;
+    }
+    .voice-group.expanded .voice-group-grid { display: grid; }
+    .voice-card { padding: 11px 10px 9px; }
+    .voice-card-name {
+      font-family: "Cinzel", serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--oc-text);
+    }
+    .voice-card-tag {
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--oc-muted);
+      font-style: italic;
+    }
+    .voice-card-listen {
+      margin-top: 8px;
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid rgba(var(--oc-accent-rgb), 0.28);
+      background: rgba(var(--oc-accent-rgb), 0.10);
+      color: var(--oc-accent);
+      min-height: 28px;
+      cursor: pointer;
+      font-family: "Cinzel", serif;
+      font-size: 9px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .voice-card-spinner {
+      margin-top: 8px;
+      color: var(--oc-muted);
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    .wizard-status {
+      min-height: 18px;
+      color: var(--oc-muted);
+      font-size: 13px;
+      font-style: italic;
+      margin-top: 18px;
+    }
+    .wizard-status.error {
+      color: var(--oc-danger);
+      font-style: normal;
+    }
+
+    .wizard-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(var(--oc-accent-rgb), 0.10);
+    }
+
+    .step-panel { display: none; }
+    .step-panel.active { display: block; animation: fadeIn 200ms ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 660px) {
+      .wizard-card {
+        padding: 26px 22px 22px;
+      }
+      .field-grid,
+      .select-grid.two,
+      .voice-group-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="oc-titlebar">
+    <span class="oc-brand">
+      <img class="oc-brand-icon" src="assets/brand/icon.png" alt="" aria-hidden="true">
+      <span class="oc-brand-text"><strong>Open</strong><span> Companion</span></span>
+    </span>
+    <button class="oc-close" id="close-btn" type="button">&times;</button>
+  </div>
+  <div class="wizard-wrap">
+    <div class="wizard-card">
+      <div class="wizard-card-shimmer"></div>
+      <img class="wizard-brand-mark" src="assets/brand/icon.png" alt="" aria-hidden="true">
+      <div class="step-dots" id="step-dots"></div>
+      <div id="step-panels"></div>
+      <div class="wizard-status" id="wizard-status"></div>
+      <div class="wizard-footer">
+        <button class="btn-ghost" id="btn-back" type="button">Back</button>
+        <button class="btn-accent" id="btn-next" type="button">Continue</button>
+      </div>
+    </div>
+  </div>
+  <script src="./onboarding-renderer.js"></script>
+</body>
+</html>

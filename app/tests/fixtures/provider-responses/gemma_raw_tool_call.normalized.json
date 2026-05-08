@@ -1,0 +1,15 @@
+{
+  "contentForUser": "",
+  "hiddenReasoning": null,
+  "toolCalls": [
+    {
+      "id": "recovered_provider_tool_call_0",
+      "name": "read_file",
+      "arguments": {
+        "path": "Daily Notes/2026-04-26.md"
+      },
+      "source": "recovered_provider_content",
+      "provider": "ollama_gemma_native"
+    }
+  ]
+}

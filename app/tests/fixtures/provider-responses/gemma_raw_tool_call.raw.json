@@ -1,0 +1,6 @@
+{
+  "message": {
+    "role": "assistant",
+    "content": "<|tool_call>call:read_file{\"path\":\"Daily Notes/2026-04-26.md\"}<tool_call|>"
+  }
+}
