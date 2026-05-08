@@ -115,12 +115,18 @@ Do not commit private conversations, local profile data, API keys, generated run
 
 OpenCompanion is free and open source.
 
-If the project helps you, you can optionally support development with a small tip or supporter token. Support is voluntary and does not unlock exclusive features, custom services, physical goods, financial returns, or charitable donation benefits.
+If the project helps you, you can optionally support development with a small tip or supporter token.
+
+[Support OpenCompanion](https://buy.stripe.com/fZu00i2Jp9TxgMLboY0Ny00)
+
+Support is voluntary and does not unlock exclusive features, custom services, physical goods, financial returns, or charity/nonprofit benefits.
 
 ## Contact
 
-Developer: Kacper Nowicki / flurris  
-Links: https://linktr.ee/flurris
+Developer: Kacper Nowicki / flurris
+
+- Links: https://linktr.ee/flurris
+- Discord: https://discord.gg/fXS9QgqRBb
 
 ## Third-Party Licenses
 
