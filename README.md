@@ -1,5 +1,7 @@
 # OpenCompanion
 
+[![Join Discord](https://img.shields.io/badge/Join%20the%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/fXS9QgqRBb)
+
 ![OpenCompanion banner](docs/opencompanion-github.png)
 
 OpenCompanion is an open-source, local-first Windows desktop companion harness for AI models, tools, memory, and practical workflows.
