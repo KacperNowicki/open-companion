@@ -6,8 +6,11 @@ const { SETTINGS_OPTIONS } = require("../shared/settings-options");
 const { runMigrations } = require("../../config/migrate");
 const { RuntimeManager } = require("../frontend/runtime-manager");
 const { createVoicePreviewService } = require("../frontend/main/voice-previews");
+const { createOllamaRuntimeCache } = require("../frontend/main/ollama-cache");
 const {
   DEFAULT_WS_URL,
+  DEFAULT_ORIGINATOR: CHATGPT_OAUTH_WS_ORIGINATOR,
+  DEFAULT_RESPONSES_WEBSOCKETS_BETA,
   buildHeaders: buildChatGptOauthWsHeaders,
   buildPayload: buildChatGptOauthWsPayload,
   sanitizeHeaderValue: sanitizeChatGptOauthWsHeaderValue,
@@ -270,17 +273,20 @@ function testOverlayScaleParserPreservesZeroAndFallsBackOnlyForMissingValues() {
 function testChatGptOauthWebsocketBridgeBuilders() {
   const headers = buildChatGptOauthWsHeaders({
     access_token: " \r\ntoken-\u0000123\t",
+    account_id: " acct-\u0000123 ",
     request_id: "request-1",
     session_id: "session-1",
   });
   assert.strictEqual(headers.Authorization, "Bearer token-123");
-  assert.strictEqual(headers["OpenAI-Beta"], "responses-websocket=v1");
-  assert.strictEqual(headers.originator, "openclaw");
-  assert.strictEqual(headers.version, "1.0.0");
-  assert.strictEqual(headers["User-Agent"], "openclaw/1.0.0");
+  assert.strictEqual(headers["chatgpt-account-id"], "acct-123");
+  assert.strictEqual(headers["OpenAI-Beta"], DEFAULT_RESPONSES_WEBSOCKETS_BETA);
+  assert.strictEqual(headers.originator, CHATGPT_OAUTH_WS_ORIGINATOR);
+  assert.strictEqual(headers.originator, "pi");
+  assert.ok(headers["User-Agent"].startsWith("pi ("));
   assert.strictEqual(headers["x-client-request-id"], "request-1");
-  assert.strictEqual(headers["x-openclaw-session-id"], "session-1");
+  assert.strictEqual(headers.session_id, "session-1");
   assert.strictEqual(sanitizeChatGptOauthWsHeaderValue(" \r\nabc\u0000\t "), "abc");
+  assert.ok(!("OpenAI-Beta" in buildChatGptOauthWsHeaders({ access_token: "token", beta_header: false })));
 
   const payload = buildChatGptOauthWsPayload({
     model: "gpt-5.4",
@@ -293,13 +299,13 @@ function testChatGptOauthWebsocketBridgeBuilders() {
     max_output_tokens: 256,
     metadata: { test: "yes" },
   });
-  assert.strictEqual(DEFAULT_WS_URL, "wss://api.openai.com/v1/responses");
+  assert.strictEqual(DEFAULT_WS_URL, "wss://chatgpt.com/backend-api/codex/responses");
   assert.strictEqual(payload.type, "response.create");
   assert.strictEqual(payload.model, "gpt-5.4");
   assert.strictEqual(payload.store, false);
   assert.strictEqual(payload.previous_response_id, "resp_123");
   assert.strictEqual(payload.temperature, 0.5);
-  assert.strictEqual(payload.max_output_tokens, 256);
+  assert.ok(!("max_output_tokens" in payload));
   assert.strictEqual(payload.tools[0].name, "demo_tool");
 }
 
@@ -307,14 +313,24 @@ function testChatGptOauthLoginFlowMatchesCodexOAuth() {
   const mainJsPath = path.join(ROOT, "app", "frontend", "main.js");
   const mainJsContent = fs.readFileSync(mainJsPath, "utf8");
   assert.ok(mainJsContent.includes('const CHATGPT_OAUTH_SCOPE = "openid profile email offline_access";'));
-  assert.ok(mainJsContent.includes('const CHATGPT_OAUTH_ORIGINATOR = process.env.CHATGPT_OAUTH_ORIGINATOR || "openclaw";'));
+  assert.ok(mainJsContent.includes("const CHATGPT_OAUTH_REQUIRED_SCOPES = [];"));
+  assert.ok(mainJsContent.includes('const CHATGPT_OAUTH_ORIGINATOR = process.env.CHATGPT_OAUTH_ORIGINATOR || "opencompanion";'));
   assert.ok(mainJsContent.includes('const CHATGPT_OAUTH_AUTH_CLAIM = "https://api.openai.com/auth";'));
+  assert.ok(mainJsContent.includes("buildProfileScopedKeychainService(\"chatgpt-oauth\")"));
+  assert.ok(mainJsContent.includes("OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE"));
+  assert.ok(mainJsContent.includes("function _chatgptMissingRequiredScopes"));
+  assert.ok(!mainJsContent.includes("function _chatgptExchangeIdTokenForApiKey"));
+  assert.ok(!mainJsContent.includes('requested_token: "openai-api-key"'));
+  assert.ok(!mainJsContent.includes('subject_token_type: "urn:ietf:params:oauth:token-type:id_token"'));
+  assert.ok(mainJsContent.includes("reconnectRequired"));
   assert.ok(mainJsContent.includes('new URLSearchParams({'));
   assert.ok(mainJsContent.includes('"Content-Type": "application/x-www-form-urlencoded"'));
   assert.ok(mainJsContent.includes('authUrl.searchParams.set("id_token_add_organizations", "true");'));
   assert.ok(mainJsContent.includes('authUrl.searchParams.set("codex_cli_simplified_flow", "true");'));
   assert.ok(mainJsContent.includes('authUrl.searchParams.set("originator", CHATGPT_OAUTH_ORIGINATOR);'));
   assert.ok(mainJsContent.includes('authClaims?.chatgpt_account_id'));
+  assert.ok(mainJsContent.includes("_chatgptAllowedCallbackHost"), "OAuth callback should reject non-local callback hosts");
+  assert.ok(mainJsContent.includes("server.listen(CHATGPT_OAUTH_CALLBACK_PORT, () =>"), "OAuth callback should accept localhost IPv4 or IPv6 connections");
 }
 
 function testChatGptOauthClientIdSupportsPublicFallback() {
@@ -336,6 +352,9 @@ function testChatGptOauthClientIdSupportsPublicFallback() {
   assert.ok(providerContent.includes('DEFAULT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"'));
   assert.ok(providerContent.includes('CHATGPT_OAUTH_CLIENT_ID'));
   assert.ok(providerContent.includes('or DEFAULT_CLIENT_ID'));
+  assert.ok(providerContent.includes("OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE"));
+  assert.ok(providerContent.includes("service_names=(_KR_SERVICE,)"));
+  assert.ok(providerContent.includes('"Content-Type": "application/x-www-form-urlencoded"'));
 
   assert.ok(envExampleContent.includes("Copy this file to `.env`"));
 }
@@ -345,6 +364,17 @@ function testBackendEnvIncludesNodeBridgeSettings() {
   const mainJsContent = fs.readFileSync(mainJsPath, "utf8");
   assert.ok(mainJsContent.includes('env.OPEN_COMPANION_NODE_PATH = process.execPath;'));
   assert.ok(mainJsContent.includes('env.OPEN_COMPANION_NODE_MODE = "electron";'));
+}
+
+function testSettingsWindowPrewarmIsHiddenAndReusable() {
+  const mainJsPath = path.join(ROOT, "app", "frontend", "main.js");
+  const mainJsContent = fs.readFileSync(mainJsPath, "utf8");
+  assert.ok(mainJsContent.includes("OPEN_COMPANION_PREWARM_SETTINGS"), "settings prewarm should be env-gated");
+  assert.ok(mainJsContent.includes("function prewarmSettingsWindow()"), "main should expose settings prewarm helper");
+  assert.ok(mainJsContent.includes("createSettingsWindow({ show: false, focus: false })"), "prewarm should create settings hidden");
+  assert.ok(mainJsContent.includes("show: false,"), "settings window should not show until ready");
+  assert.ok(mainJsContent.includes("settingsWindow.hide();"), "settings close should hide the reusable window");
+  assert.ok(mainJsContent.includes("if (getMainWindow() || getOnboardingWindow())"), "activate should ignore hidden settings-only windows");
 }
 
 function testChatGptOauthModelCatalogIsSharedLocally() {
@@ -438,8 +468,12 @@ function testOverlayCompactLayoutBreakpointsStayInsideTheWindow() {
   assert.ok(!overlayContent.includes("@media (max-width: 560px)"), "slider-driven scaling should not rely on medium compact breakpoints anymore");
   assert.ok(!overlayContent.includes("@media (max-width: 460px)"), "slider-driven scaling should not rely on narrow compact breakpoints anymore");
   assert.ok(overlayContent.includes("#avatar-host canvas"), "avatar canvas should be explicitly constrained to the scene bounds");
+  assert.ok(overlayContent.includes('id="scene-loading"'), "overlay should show a scene loading layer while the avatar initializes");
+  assert.ok(overlayContent.includes("#scene.scene-ready .scene-loading"), "scene loading layer should hide only after the scene is ready");
   assert.ok(sceneContent.includes('import { TalkingHead } from "@met4citizen/talkinghead";'), "scene controller should use the TalkingHead renderer");
   assert.ok(rendererContent.includes('createTalkingHeadScene'), "renderer should use the TalkingHead scene controller");
+  assert.ok(rendererContent.includes("watchTalkingHeadReady"), "renderer should watch the TalkingHead readiness promise");
+  assert.ok(rendererContent.includes("getSceneLoadingState"), "overlay test hook should expose scene loading state");
   assert.ok(preloadContent.includes("getOverlayScaleFactor"), "overlay preload should expose the shared overlay scale factor helper");
   assert.ok(rendererContent.includes("--overlay-ui-scale"), "renderer should apply the overlay scale factor to the document");
 }
@@ -509,6 +543,67 @@ function testRuntimeManagerMemoryComponentResolution() {
   );
 }
 
+async function testOllamaRuntimeCacheReusesMetadataRequests() {
+  let now = 1000;
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const value = String(url);
+    calls.push({ url: value, body: options.body || "" });
+    if (value.endsWith("/api/tags")) {
+      return {
+        ok: true,
+        json: async () => ({ models: [{ name: "gemma:latest", size: 2400000000, modified_at: "2026-05-01T00:00:00Z" }] }),
+      };
+    }
+    if (value.endsWith("/api/ps")) {
+      return {
+        ok: true,
+        json: async () => ({ models: [{ name: "gemma:latest" }] }),
+      };
+    }
+    if (value.endsWith("/api/show")) {
+      return {
+        ok: true,
+        json: async () => ({
+          details: { family: "gemma", parameter_size: "4B", quantization_level: "Q4_K_M" },
+          model_info: { "gemma.context_length": 8192, "llama.embedding_length": 2048 },
+          parameters: "temperature 0.8\ntop_k 64\ntop_p 0.95",
+          capabilities: ["completion", "tools"],
+        }),
+      };
+    }
+    throw new Error(`Unexpected URL: ${value}`);
+  };
+  const cache = createOllamaRuntimeCache({ fetchImpl, now: () => now, ttlMs: 1000, showTtlMs: 1000 });
+
+  assert.strictEqual((await cache.listModelSummaries())[0].size_gb, "2.4");
+  await cache.listModelSummaries();
+  assert.strictEqual(calls.filter((call) => call.url.endsWith("/api/tags")).length, 1);
+
+  const [validationInfo, modelInfo] = await Promise.all([
+    cache.getRuntimeValidationInfo("gemma:latest"),
+    cache.getEnrichedModelInfo("gemma:latest"),
+  ]);
+  assert.strictEqual(validationInfo.contextLength, 8192);
+  assert.strictEqual(modelInfo.topK, 64);
+  assert.strictEqual(calls.filter((call) => call.url.endsWith("/api/show")).length, 1);
+
+  await cache.listRunningModels();
+  await cache.listRunningModels();
+  assert.strictEqual(calls.filter((call) => call.url.endsWith("/api/ps")).length, 1);
+
+  now += 1001;
+  await cache.getRuntimeValidationInfo("gemma:latest");
+  assert.strictEqual(calls.filter((call) => call.url.endsWith("/api/show")).length, 2);
+
+  const testStateCache = createOllamaRuntimeCache({
+    fetchImpl: async () => {
+      throw new Error("test state should not fall through to network");
+    },
+  });
+  assert.strictEqual(await testStateCache.getEnrichedModelInfo("missing-model", { show: {} }), null);
+}
+
 const legacyLayerConfig = {
   version: "1.1.0",
   brain: {
@@ -548,6 +643,7 @@ assert.strictEqual(idempotentMigrated.brain.layers.assistant.model, "steady_mode
   await testRuntimeManagerStateMachine();
   await testRuntimeManagerRefreshStatusClearsStaleReady();
   testRuntimeManagerMemoryComponentResolution();
+  await testOllamaRuntimeCacheReusesMetadataRequests();
 testIpcHandlersRegistered();
 testPreloadExposesSessionReset();
 testOverlayScaleHelperExistsAndMapsMidpointToLegacySize();
@@ -556,6 +652,7 @@ testChatGptOauthWebsocketBridgeBuilders();
 testChatGptOauthLoginFlowMatchesCodexOAuth();
 testChatGptOauthClientIdSupportsPublicFallback();
   testBackendEnvIncludesNodeBridgeSettings();
+  testSettingsWindowPrewarmIsHiddenAndReusable();
   testChatGptOauthModelCatalogIsSharedLocally();
   testSettingsOauthMarkupUsesPlainQuotes();
   testOverlayScaleSettingsAndNoCustomResizeGrip();

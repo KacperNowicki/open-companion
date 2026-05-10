@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import os
+import base64
 import sys
 import types
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -596,6 +598,23 @@ def test_chatgpt_oauth_sanitizes_bearer_tokens() -> None:
     dirty = " \r\nabc\x00.def\tghi\x7f \n"
     clean = _sanitize_bearer_token(dirty)
     assert clean == "abc.defghi"
+    ok(name)
+
+
+def test_chatgpt_oauth_extracts_account_id_for_websocket_header() -> None:
+    name = "chatgpt oauth extracts account id for websocket auth header"
+    from providers.chatgpt_oauth import _extract_chatgpt_account_id
+
+    payload = {
+        "sub": "fallback-sub",
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": "acct-header-123",
+        },
+    }
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii").rstrip("=")
+    token = f"header.{payload_b64}.signature"
+
+    assert _extract_chatgpt_account_id(token) == "acct-header-123"
     ok(name)
 
 
@@ -1367,7 +1386,7 @@ def test_chatgpt_oauth_provider_registry() -> None:
 
 def test_chatgpt_oauth_reads_keytar_compatible_store() -> None:
     name = "chatgpt_oauth reads tokens through shared keyring helper"
-    from providers.chatgpt_oauth import _read_token_store
+    from providers.chatgpt_oauth import _KR_SERVICE, _read_token_store
 
     values = {
         "chatgpt_oauth_access": "access-token",
@@ -1375,10 +1394,13 @@ def test_chatgpt_oauth_reads_keytar_compatible_store() -> None:
         "chatgpt_oauth_expires": "1234567890",
         "chatgpt_oauth_account_id": "acct-123",
     }
+    service_names_seen: list[tuple[str, ...]] = []
 
     with mock.patch(
         "providers.chatgpt_oauth.read_keyring_secret",
-        side_effect=lambda accounts, service_names=None: values.get(accounts[0], ""),
+        side_effect=lambda accounts, service_names=None: (
+            service_names_seen.append(tuple(service_names or ())) or values.get(accounts[0], "")
+        ),
     ):
         store = _read_token_store()
 
@@ -1388,6 +1410,53 @@ def test_chatgpt_oauth_reads_keytar_compatible_store() -> None:
         "expires": "1234567890",
         "account_id": "acct-123",
     }
+    assert service_names_seen
+    assert all(names == (_KR_SERVICE,) for names in service_names_seen)
+    if os.environ.get("OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE"):
+        assert _KR_SERVICE == os.environ["OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE"]
+    else:
+        assert ":chatgpt-oauth:" in _KR_SERVICE
+
+    ok(name)
+
+
+def test_chatgpt_oauth_refresh_uses_form_encoding() -> None:
+    name = "chatgpt_oauth refresh uses form-encoded OAuth token grant"
+    from providers.chatgpt_oauth import _refresh_tokens
+
+    captured: dict[str, object] = {}
+
+    class FakeTokenResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({
+                "access_token": "header.eyJleHAiOjQ3NDQ0NDQ0NDR9.sig",
+                "refresh_token": "new-refresh-token",
+                "expires_in": 3600,
+            }).encode("utf-8")
+
+    def fake_urlopen(req, timeout=15):
+        captured["timeout"] = timeout
+        captured["content_type"] = req.headers.get("Content-type") or req.headers.get("Content-Type")
+        captured["body"] = req.data.decode("utf-8")
+        return FakeTokenResponse()
+
+    with mock.patch("providers.chatgpt_oauth.urllib.request.urlopen", side_effect=fake_urlopen):
+        with mock.patch("providers.chatgpt_oauth._require_chatgpt_oauth_client_id", return_value="client-123"):
+            refreshed = _refresh_tokens("old-refresh-token")
+
+    assert refreshed["access"].startswith("header.")
+    assert refreshed["refresh"] == "new-refresh-token"
+    assert captured["content_type"] == "application/x-www-form-urlencoded"
+    parsed = urllib.parse.parse_qs(str(captured["body"]))
+    assert parsed["grant_type"] == ["refresh_token"]
+    assert parsed["refresh_token"] == ["old-refresh-token"]
+    assert parsed["client_id"] == ["client-123"]
 
     ok(name)
 
@@ -1543,8 +1612,87 @@ def test_chatgpt_oauth_disables_websocket_after_401() -> None:
     assert first.content == "OK"
     assert second.content == "OK"
     assert ws_mock.call_count == 1
+    assert ws_mock.call_args[0][0]["access_token"] == "header.eyJleHAiOjQ3NDQ0NDQ0NDR9.sig"
     assert provider._ws_disabled is True
     assert len(request_bodies) == 2
+    ok(name)
+
+
+def test_chatgpt_oauth_websocket_bridge_reuses_process() -> None:
+    name = "chatgpt_oauth websocket bridge keeps one process for sequential turns"
+    from providers.chatgpt_oauth import ChatGPTOAuthProvider
+
+    class FakeStdin:
+        def __init__(self):
+            self.writes: list[str] = []
+            self.closed = False
+
+        def write(self, text: str) -> None:
+            self.writes.append(text)
+
+        def flush(self) -> None:
+            return None
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeStdout:
+        def __init__(self):
+            self.lines = [
+                'data: {"type":"response.output_text.delta","delta":"One"}\n',
+                'data: {"type":"response.completed","response":{"id":"resp_1"}}\n',
+                "data: [DONE]\n",
+                'data: {"type":"response.output_text.delta","delta":"Two"}\n',
+                'data: {"type":"response.completed","response":{"id":"resp_2"}}\n',
+                "data: [DONE]\n",
+            ]
+            self.closed = False
+
+        def readline(self) -> str:
+            if self.lines:
+                return self.lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeProc:
+        def __init__(self):
+            self.stdin = FakeStdin()
+            self.stdout = FakeStdout()
+            self.returncode = None
+            self.killed = False
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+    fake_proc = FakeProc()
+    provider = ChatGPTOAuthProvider({"provider": "chatgpt_oauth", "model": "gpt-5.4"}, "assistant")
+
+    with mock.patch("providers.chatgpt_oauth.subprocess.Popen", return_value=fake_proc) as popen_mock:
+        first = provider._run_ws_bridge({"model": "gpt-5.4", "input": [], "access_token": "token-a"})
+        second = provider._run_ws_bridge({"model": "gpt-5.4", "input": [], "access_token": "token-a"})
+
+    assert popen_mock.call_count == 1
+    assert first.content == "One"
+    assert first.raw == {"response_id": "resp_1"}
+    assert second.content == "Two"
+    assert second.raw == {"response_id": "resp_2"}
+    request_lines = [json.loads(line) for line in fake_proc.stdin.writes]
+    assert len(request_lines) == 2
+    assert request_lines[0]["model"] == "gpt-5.4"
+    assert request_lines[1]["access_token"] == "token-a"
+
+    provider._close_ws_bridge()
+    assert fake_proc.stdin.closed is True
     ok(name)
 
 
@@ -1769,6 +1917,7 @@ def run_all() -> bool:
         test_chatgpt_oauth_build_input_uses_openclaw_message_shape,
         test_chatgpt_oauth_plans_incremental_tool_result_turns,
         test_chatgpt_oauth_sanitizes_bearer_tokens,
+        test_chatgpt_oauth_extracts_account_id_for_websocket_header,
         test_chatgpt_oauth_has_public_client_id_fallback,
         test_gemini_auth_header_registry_and_tool_calls,
         test_gemini_3_uses_thinking_level,
@@ -1793,9 +1942,11 @@ def run_all() -> bool:
         test_qwen_local_request_shape_and_reasoning_strip,
         test_qwen_cloud_dashscope_key_and_thinking_body,
         test_chatgpt_oauth_reads_keytar_compatible_store,
+        test_chatgpt_oauth_refresh_uses_form_encoding,
         test_chatgpt_oauth_truncates_oversized_instructions,
         test_chatgpt_oauth_sse_retry_removes_unsupported_parameter,
         test_chatgpt_oauth_disables_websocket_after_401,
+        test_chatgpt_oauth_websocket_bridge_reuses_process,
         test_chatgpt_oauth_sse_replays_full_tool_history_without_previous_response_id,
         test_chatgpt_oauth_compacts_local_runtime_sections,
     ]

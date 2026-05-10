@@ -17,12 +17,14 @@ Keyring keys:
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
 import re
 import subprocess
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 import uuid
@@ -35,6 +37,7 @@ from chatgpt_oauth_models import (
     normalize_chatgpt_oauth_model_name,
 )
 from debug_log import debug_tool_schema
+from runtime_paths import KEYCHAIN_SERVICE, PROFILE_ROOT
 from .base import (
     BrainMessage,
     BrainProvider,
@@ -50,12 +53,20 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex/responses"
-OPENAI_WS_URL = "wss://api.openai.com/v1/responses"
+CODEX_WS_URL = "wss://chatgpt.com/backend-api/codex/responses"
 TOKEN_URL = "https://auth.openai.com/oauth/token"
 DEFAULT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 
 # Keyring service + account names (must match main.js)
-_KR_SERVICE = "OpenCompanion"
+def _default_oauth_keychain_service() -> str:
+    digest = hashlib.sha256(str(PROFILE_ROOT).lower().encode("utf-8")).hexdigest()[:12]
+    return f"{KEYCHAIN_SERVICE}:chatgpt-oauth:{digest}"
+
+
+_KR_SERVICE = (
+    str(os.environ.get("OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE") or "").strip()
+    or _default_oauth_keychain_service()
+)
 _KR_ACCESS = "chatgpt_oauth_access"
 _KR_REFRESH = "chatgpt_oauth_refresh"
 _KR_EXPIRES = "chatgpt_oauth_expires"
@@ -134,16 +145,21 @@ def _require_chatgpt_oauth_client_id() -> str:
 
 
 def _read_token_store() -> dict:
-    """Read all four keyring keys using the shared keytar-aware helper."""
+    """Read ChatGPT OAuth keys using the shared keytar-aware helper."""
     return {
-        "access": read_keyring_secret([_KR_ACCESS], service_names=("open-companion", _KR_SERVICE)),
-        "refresh": read_keyring_secret([_KR_REFRESH], service_names=("open-companion", _KR_SERVICE)),
-        "expires": read_keyring_secret([_KR_EXPIRES], service_names=("open-companion", _KR_SERVICE)),
-        "account_id": read_keyring_secret([_KR_ACCOUNT], service_names=("open-companion", _KR_SERVICE)),
+        "access": read_keyring_secret([_KR_ACCESS], service_names=(_KR_SERVICE,)),
+        "refresh": read_keyring_secret([_KR_REFRESH], service_names=(_KR_SERVICE,)),
+        "expires": read_keyring_secret([_KR_EXPIRES], service_names=(_KR_SERVICE,)),
+        "account_id": read_keyring_secret([_KR_ACCOUNT], service_names=(_KR_SERVICE,)),
     }
 
 
-def _write_token_store(access: str, refresh: str, expires_ms: int, account_id: str) -> None:
+def _write_token_store(
+    access: str,
+    refresh: str,
+    expires_ms: int,
+    account_id: str,
+) -> None:
     try:
         import keyring as kr
     except Exception:
@@ -187,7 +203,7 @@ def _token_is_fresh(access_token: str) -> bool:
 def _refresh_tokens(refresh_token: str) -> dict:
     """POST to token endpoint with refresh_token grant.  Returns new token dict."""
     client_id = _require_chatgpt_oauth_client_id()
-    payload = json.dumps({
+    payload = urllib.parse.urlencode({
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
         "client_id": client_id,
@@ -196,7 +212,7 @@ def _refresh_tokens(refresh_token: str) -> dict:
     req = urllib.request.Request(
         TOKEN_URL,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST",
     )
     try:
@@ -219,20 +235,7 @@ def _refresh_tokens(refresh_token: str) -> dict:
     expires_in = int(data.get("expires_in") or 3600)
     expires_ms = int((time.time() + expires_in) * 1000)
 
-    # Extract account_id from id_token if present
-    account_id = ""
-    id_token = str(data.get("id_token") or "").strip()
-    if id_token:
-        exp = _decode_jwt_exp(id_token)
-        # Decode payload for sub claim
-        try:
-            parts = id_token.split(".")
-            if len(parts) >= 2:
-                payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
-                payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-                account_id = str(payload.get("sub") or "").strip()
-        except Exception:
-            pass
+    account_id = _extract_chatgpt_account_id(access)
 
     return {
         "access": access,
@@ -240,6 +243,23 @@ def _refresh_tokens(refresh_token: str) -> dict:
         "expires_ms": expires_ms,
         "account_id": account_id,
     }
+
+
+def _extract_chatgpt_account_id(access_token: str) -> str:
+    try:
+        parts = str(access_token or "").split(".")
+        if len(parts) < 2:
+            return ""
+        payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        auth = payload.get("https://api.openai.com/auth")
+        if isinstance(auth, dict):
+            account_id = str(auth.get("chatgpt_account_id") or "").strip()
+            if account_id:
+                return account_id
+        return str(payload.get("sub") or "").strip()
+    except Exception:
+        return ""
 
 
 def _raise_from_http_error(status: int, body: str) -> None:
@@ -252,6 +272,11 @@ def _raise_from_http_error(status: int, body: str) -> None:
         if "unsupported_country" in lowered or "region" in lowered or "territory" in lowered:
             raise BrainProviderAuthError(
                 "ChatGPT OAuth is not available in your region."
+            )
+        if "missing scopes" in lowered:
+            raise BrainProviderAuthError(
+                f"ChatGPT OAuth: missing OAuth permission (HTTP {status}): {body[:200]}. "
+                "Disconnect and reconnect your ChatGPT account in Settings."
             )
         raise BrainProviderAuthError(
             f"ChatGPT OAuth: authentication failed (HTTP {status}). "
@@ -340,6 +365,40 @@ def _build_openclaw_text_input(text: str) -> list[dict[str, str]]:
     return [{"type": "input_text", "text": content}] if content else []
 
 
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
+
+
+def _provider_error_from_ws_event(event: dict[str, Any]) -> BrainProviderError:
+    error_obj = event.get("error")
+    status_code = _safe_int(event.get("status"))
+    message = str(event.get("message") or "").strip()
+
+    if isinstance(error_obj, dict):
+        status_code = status_code or _safe_int(error_obj.get("status"))
+        code = str(error_obj.get("code") or error_obj.get("type") or "").strip()
+        nested_message = str(error_obj.get("message") or "").strip()
+        message = nested_message or message or json.dumps(error_obj, ensure_ascii=False)
+        if code and code not in message:
+            message = f"{code}: {message}"
+    elif error_obj:
+        message = message or str(error_obj)
+
+    if not status_code:
+        status_code = _safe_int(event.get("code")) or 500
+    if not message:
+        message = "ChatGPT OAuth websocket error."
+
+    try:
+        _raise_from_http_error(status_code, message)
+    except BrainProviderError as exc:
+        return exc
+    return BrainProviderConnectionError(message)
+
+
 def _parse_sse_stream(response_iter, stream_handler=None) -> BrainMessage:
     """Parse OpenAI Responses API SSE stream from the Codex endpoint.
 
@@ -350,6 +409,7 @@ def _parse_sse_stream(response_iter, stream_handler=None) -> BrainMessage:
     text_parts: list[str] = []
     raw_tool_calls: dict[int, dict[str, Any]] = {}
     response_id: str | None = None
+    pending_error: BrainProviderError | None = None
 
     for raw_line in response_iter:
         if isinstance(raw_line, bytes):
@@ -403,21 +463,22 @@ def _parse_sse_stream(response_iter, stream_handler=None) -> BrainMessage:
                 })
 
         elif event_type == "error":
-            msg = str(event.get("message") or event.get("error") or "unknown error")
-            status = event.get("status")
-            try:
-                status_code = int(status or 0)
-            except Exception:
-                status_code = 0
-            if not status_code:
-                try:
-                    status_code = int(event.get("code") or 0)
-                except Exception:
-                    status_code = 0
-            _raise_from_http_error(status_code or 500, msg)
+            pending_error = _provider_error_from_ws_event(event)
+        elif event_type == "response.failed":
+            response = event.get("response") or {}
+            pending_error = _provider_error_from_ws_event({
+                "type": "error",
+                "status": event.get("status") or response.get("status") or 500,
+                "error": response.get("error") or event.get("error") or {
+                    "message": "ChatGPT OAuth websocket response failed."
+                },
+            })
         elif event_type == "response.completed":
             response = event.get("response") or {}
             response_id = str(response.get("id") or "").strip() or response_id
+
+    if pending_error is not None:
+        raise pending_error
 
     content = "".join(text_parts).strip()
     tool_calls_list = [
@@ -444,6 +505,7 @@ class ChatGPTOAuthProvider(BrainProvider):
         self._last_context_length = 0
         self._ws_disabled = False
         self._ws_disable_reason = ""
+        self._ws_bridge_proc: subprocess.Popen | None = None
 
     def _get_access_token(self) -> str:
         """Return a valid access token, refreshing if needed.
@@ -488,6 +550,13 @@ class ChatGPTOAuthProvider(BrainProvider):
             account_id=new_tokens.get("account_id") or store.get("account_id", ""),
         )
         return new_tokens["access"]
+
+    def _get_chatgpt_account_id(self, access_token: str) -> str:
+        store = _read_token_store()
+        return (
+            str(store.get("account_id") or "").strip()
+            or _extract_chatgpt_account_id(access_token)
+        )
 
     def _build_input(self, messages: list[dict], system: str = "", include_system_item: bool = True) -> list[dict]:
         """Convert messages into the OpenClaw-style Responses/WebSocket input shape."""
@@ -573,67 +642,111 @@ class ChatGPTOAuthProvider(BrainProvider):
             return
         self._ws_disabled = True
         self._ws_disable_reason = str(reason or "").strip()
+        self._close_ws_bridge()
         logger.warning(
             "chatgpt_oauth: disabling websocket transport for the remainder of this session; using SSE fallback instead: %s",
             self._ws_disable_reason or "unknown reason",
         )
 
-    def _run_ws_bridge(
-        self,
-        payload: dict[str, Any],
-        stream_handler=None,
-    ) -> BrainMessage:
+    def _close_ws_bridge(self) -> None:
+        proc = self._ws_bridge_proc
+        self._ws_bridge_proc = None
+        if proc is None:
+            return
+        try:
+            if proc.stdin is not None and proc.poll() is None:
+                proc.stdin.write(json.dumps({"type": "bridge.close"}) + "\n")
+                proc.stdin.flush()
+        except Exception:
+            pass
+        try:
+            if proc.stdin is not None:
+                proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=1)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        try:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        except Exception:
+            pass
+
+    def _get_ws_bridge_proc(self) -> subprocess.Popen:
+        proc = self._ws_bridge_proc
+        if (
+            proc is not None
+            and proc.poll() is None
+            and proc.stdin is not None
+            and proc.stdout is not None
+        ):
+            return proc
+
+        self._close_ws_bridge()
+
         env = dict(os.environ)
         node_mode = str(env.get("OPEN_COMPANION_NODE_MODE") or "").strip().lower()
         command = self._resolve_ws_bridge_command()
         if node_mode == "electron":
             env["ELECTRON_RUN_AS_NODE"] = "1"
 
-        proc = subprocess.Popen(
-            command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            cwd=str(_WS_BRIDGE_PATH.parent),
-            env=env,
-        )
-
         try:
-            if proc.stdin is None or proc.stdout is None:
-                raise BrainProviderConnectionError("ChatGPT OAuth websocket bridge failed to start.")
-            proc.stdin.write(json.dumps(payload, ensure_ascii=False))
-            proc.stdin.close()
-            message = _parse_sse_stream(proc.stdout, stream_handler=stream_handler)
-            stderr_text = proc.stderr.read() if proc.stderr is not None else ""
-            return_code = proc.wait(timeout=10)
-            if return_code != 0 and not message.content and not message.tool_calls:
-                raise BrainProviderConnectionError(
-                    f"ChatGPT OAuth websocket bridge exited with code {return_code}: {stderr_text[:300]}"
-                )
-            if stderr_text.strip():
-                logger.warning("chatgpt_oauth: websocket bridge stderr: %s", stderr_text[:500])
-            return message
+            proc = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+                cwd=str(_WS_BRIDGE_PATH.parent),
+                env=env,
+            )
         except FileNotFoundError as exc:
             raise BrainProviderConnectionError(
                 f"ChatGPT OAuth websocket bridge runtime not found: {command[0]}"
             ) from exc
-        finally:
-            try:
-                if proc.stdout is not None:
-                    proc.stdout.close()
-            except Exception:
-                pass
-            try:
-                if proc.stderr is not None:
-                    proc.stderr.close()
-            except Exception:
-                pass
-            try:
-                proc.kill()
-            except Exception:
-                pass
+
+        if proc.stdin is None or proc.stdout is None:
+            raise BrainProviderConnectionError("ChatGPT OAuth websocket bridge failed to start.")
+
+        self._ws_bridge_proc = proc
+        return proc
+
+    def _run_ws_bridge(
+        self,
+        payload: dict[str, Any],
+        stream_handler=None,
+    ) -> BrainMessage:
+        proc = self._get_ws_bridge_proc()
+        try:
+            if proc.stdin is None or proc.stdout is None:
+                raise BrainProviderConnectionError("ChatGPT OAuth websocket bridge failed to start.")
+            proc.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            proc.stdin.flush()
+            message = _parse_sse_stream(iter(proc.stdout.readline, ""), stream_handler=stream_handler)
+            return_code = proc.poll()
+            if return_code is not None:
+                self._close_ws_bridge()
+            if return_code not in {None, 0} and not message.content and not message.tool_calls:
+                raise BrainProviderConnectionError(
+                    f"ChatGPT OAuth websocket bridge exited with code {return_code}."
+                )
+            return message
+        except (BrokenPipeError, OSError) as exc:
+            self._close_ws_bridge()
+            raise BrainProviderConnectionError(
+                f"ChatGPT OAuth websocket bridge connection failed: {exc}"
+            ) from exc
+        except Exception:
+            if proc.poll() is not None:
+                self._close_ws_bridge()
+            raise
 
     def _build_tools(self, tools: list[dict] | None) -> list[dict]:
         result: list[dict] = []
@@ -663,6 +776,7 @@ class ChatGPTOAuthProvider(BrainProvider):
         extra_body: dict | None = None,
     ) -> BrainMessage:
         access_token = self._get_access_token()
+        account_id = self._get_chatgpt_account_id(access_token)
         requested_model = str(model or self.model or get_default_chatgpt_oauth_model_id()).strip()
         resolved_model = normalize_chatgpt_oauth_model_name(requested_model)
         if requested_model and requested_model != resolved_model:
@@ -672,7 +786,7 @@ class ChatGPTOAuthProvider(BrainProvider):
                 resolved_model,
             )
             self.model = resolved_model
-        ws_turn_input = self._plan_turn_input(messages, system=system, include_system_item=True)
+        ws_turn_input = self._plan_turn_input(messages, system=system, include_system_item=False)
         sse_turn_input = {
             "input": self._build_input(messages, system="", include_system_item=False),
         }
@@ -683,6 +797,7 @@ class ChatGPTOAuthProvider(BrainProvider):
             "input": ws_turn_input["input"],
             "store": False,
             "stream": True,
+            "instructions": compact_system,
         }
         built_tools = self._build_tools(tools)
         if built_tools:
@@ -690,9 +805,6 @@ class ChatGPTOAuthProvider(BrainProvider):
             body["tool_choice"] = "auto"
         if temperature is not None:
             body["temperature"] = temperature
-        if max_tokens:
-            body["max_output_tokens"] = max_tokens
-
         if ws_turn_input.get("previous_response_id"):
             body["previous_response_id"] = ws_turn_input["previous_response_id"]
 
@@ -703,9 +815,10 @@ class ChatGPTOAuthProvider(BrainProvider):
                     {
                         **body,
                         "access_token": access_token,
+                        "account_id": account_id,
                         "session_id": self._ws_session_id,
                         "request_id": str(uuid.uuid4()),
-                        "url": OPENAI_WS_URL,
+                        "url": CODEX_WS_URL,
                     },
                     stream_handler=stream_handler if stream else None,
                 )
@@ -718,8 +831,15 @@ class ChatGPTOAuthProvider(BrainProvider):
                     self._previous_response_id = str(response_id)
                 self._last_context_length = len(messages or [])
                 return ws_message
-            except BrainProviderConnectionError as exc:
+            except BrainProviderError as exc:
                 message = str(exc)
+                if (
+                    "previous_response_not_found" in message
+                    or "websocket_connection_limit_reached" in message
+                ):
+                    self._previous_response_id = None
+                    self._last_context_length = 0
+                    self._close_ws_bridge()
                 if "401" in message or "authentication failed" in message.lower():
                     self._disable_websocket_for_session(message)
                 logger.warning(
@@ -742,17 +862,20 @@ class ChatGPTOAuthProvider(BrainProvider):
         for _attempt in range(4):
             debug_tool_schema("PROVIDER_REQUEST_BODY", {"provider": "chatgpt_oauth", "api": "sse", "body": sse_body})
             payload = json.dumps(sse_body, ensure_ascii=False).encode("utf-8")
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "OpenAI-Beta": "responses=experimental",
+                "originator": "pi",
+                "User-Agent": "pi (python)",
+            }
+            if account_id:
+                headers["chatgpt-account-id"] = account_id
             req = urllib.request.Request(
                 CODEX_BASE_URL,
                 data=payload,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream",
-                    "Origin": "https://chatgpt.com",
-                    "Referer": "https://chatgpt.com/",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) OpenCompanion/1.0 Chrome/136.0.0.0 Safari/537.36",
-                },
+                headers=headers,
                 method="POST",
             )
             try:

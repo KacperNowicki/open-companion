@@ -491,6 +491,8 @@
       place-items: center;
       pointer-events: none;
       z-index: 1;
+      opacity: 0;
+      transition: opacity 420ms ease;
     }
 
     #avatar-host canvas {
@@ -498,6 +500,118 @@
       width: 100% !important;
       height: 100% !important;
       max-width: 100%;
+    }
+
+    #scene.scene-ready #avatar-host {
+      opacity: 1;
+    }
+
+    #scene.scene-error #avatar-host {
+      opacity: 0.12;
+    }
+
+    .scene-loading {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(10, 7, 20, 0.48), rgba(5, 4, 12, 0.68)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 22px);
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 260ms ease, visibility 260ms ease;
+    }
+
+    #scene.scene-ready .scene-loading {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .scene-loader-stack {
+      display: grid;
+      justify-items: center;
+      gap: 12px;
+      min-width: 150px;
+      max-width: 86%;
+      text-align: center;
+      transform: translateY(4px);
+    }
+
+    .scene-loader-mark {
+      position: relative;
+      width: 58px;
+      aspect-ratio: 1;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 50%;
+      box-shadow:
+        inset 0 0 18px rgba(var(--accent-rgb), 0.12),
+        0 14px 36px rgba(0, 0, 0, 0.26);
+    }
+
+    .scene-loader-mark::before,
+    .scene-loader-mark::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+    }
+
+    .scene-loader-mark::before {
+      inset: 5px;
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      border-top-color: rgba(255, 255, 255, 0.72);
+      border-right-color: rgba(var(--accent-rgb), 0.72);
+      animation: scene-loader-spin 920ms linear infinite;
+    }
+
+    .scene-loader-mark::after {
+      inset: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.34);
+    }
+
+    #scene.scene-error .scene-loader-mark::before {
+      animation: none;
+      border-top-color: var(--danger);
+      border-right-color: rgba(242, 160, 160, 0.55);
+    }
+
+    .scene-loader-label {
+      color: var(--text-main);
+      font-family: var(--font-display);
+      font-size: 16px;
+      line-height: 1.1;
+      letter-spacing: 0;
+      white-space: nowrap;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .scene-loader-status {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.2;
+      min-height: 16px;
+    }
+
+    @keyframes scene-loader-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #avatar-host,
+      .scene-loading {
+        transition: none;
+      }
+
+      .scene-loader-mark::before {
+        animation: none;
+      }
     }
 
     .talking-head-figure {
@@ -1499,6 +1613,13 @@
     <section class="visual">
       <div id="scene">
         <div id="avatar-host"></div>
+        <div id="scene-loading" class="scene-loading" aria-live="polite">
+          <div class="scene-loader-stack">
+            <div class="scene-loader-mark" aria-hidden="true"></div>
+            <div class="scene-loader-label" id="scene-loading-label">Waking Companion</div>
+            <div class="scene-loader-status" id="scene-loading-status">Preparing avatar</div>
+          </div>
+        </div>
         <div id="startup-banners"></div>
         <div id="update-banner" class="startup-banner hidden" style="border-left-color: rgba(99,179,237,0.8);">
           <div class="startup-banner-body">

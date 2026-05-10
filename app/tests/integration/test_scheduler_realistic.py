@@ -92,18 +92,40 @@ def main() -> int:
     scheduler_tools.scheduler.TODO_PATH = scratch / "todo.md"
     scheduler_tools.scheduler.SCHEDULE_PATH = scratch / "schedule.md"
     scheduler_tools.scheduler._now = lambda: datetime(2026, 5, 1, 17, 30)
+    scheduler_tools.scheduler._invalidate_reminder_caches()
     rows = []
     try:
         for index, (kind, label, kwargs, expected) in enumerate(CASES, start=1):
             result = scheduler_tools.add_reminder(**kwargs) if kind == "one_off" else scheduler_tools.add_recurring_reminder(**kwargs)
             actual = _classify(result)
             rows.append((index, actual == expected, kind, expected, actual, label, result))
+
+        case_schedule_path = scheduler_tools.scheduler.SCHEDULE_PATH
+        scheduler_tools.scheduler.SCHEDULE_PATH = scratch / "schedule-cache.md"
+        scheduler_tools.scheduler._invalidate_reminder_caches()
+        scheduler_tools.scheduler.SCHEDULE_PATH.write_text("- [ ] Alpha cache | every day 09:00\n", encoding="utf-8")
+        first = scheduler_tools.scheduler._schedule_reminders()
+        scheduler_tools.scheduler.SCHEDULE_PATH.write_text("- [ ] Beta cache task | every day 10:00\n", encoding="utf-8")
+        second = scheduler_tools.scheduler._schedule_reminders()
+        scheduler_tools.scheduler.SCHEDULE_PATH = case_schedule_path
+        scheduler_tools.scheduler._invalidate_reminder_caches()
+        cache_ok = [item.text for item in first] == ["Alpha cache"] and [item.text for item in second] == ["Beta cache task"]
+        rows.append((
+            len(rows) + 1,
+            cache_ok,
+            "cache",
+            "refresh",
+            "refresh" if cache_ok else f"{[item.text for item in first]} -> {[item.text for item in second]}",
+            "Scheduler parse cache refreshes when schedule.md changes",
+            "cache refresh check",
+        ))
     finally:
         todo_text = scheduler_tools.scheduler.TODO_PATH.read_text(encoding="utf-8") if scheduler_tools.scheduler.TODO_PATH.exists() else ""
         schedule_text = scheduler_tools.scheduler.SCHEDULE_PATH.read_text(encoding="utf-8") if scheduler_tools.scheduler.SCHEDULE_PATH.exists() else ""
         scheduler_tools.scheduler.TODO_PATH = original_todo
         scheduler_tools.scheduler.SCHEDULE_PATH = original_schedule
         scheduler_tools.scheduler._now = original_now
+        scheduler_tools.scheduler._invalidate_reminder_caches()
         shutil.rmtree(scratch, ignore_errors=True)
 
     passed = sum(1 for row in rows if row[1])

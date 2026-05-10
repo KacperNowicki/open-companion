@@ -73,6 +73,7 @@ const {
 } = require("./main/provider-models");
 const { registerVoicePreviewIpc } = require("./main/ipc");
 const { createVoicePreviewService } = require("./main/voice-previews");
+const { createOllamaRuntimeCache } = require("./main/ollama-cache");
 
 process.env.OPEN_COMPANION_PROFILE_DIR = runtimePaths.PROFILE_ROOT;
 process.env.OPEN_COMPANION_PROJECT_ROOT = runtimePaths.READONLY_PROJECT_ROOT;
@@ -168,7 +169,11 @@ const DEBUG_LOGS_DIR = path.join(PROJECT_ROOT, "logs");
 const DEBUG_LOG_PATH = path.join(DEBUG_LOGS_DIR, "debug.log");
 const DEBUG_LOG_ROTATE_BYTES = 10 * 1024 * 1024;
 const DEBUG_LOG_ENABLED = process.env.OPENCOMPANION_DEBUG === "1";
+const SETTINGS_PREWARM_DELAY_MS = Math.max(0, Number.parseInt(process.env.OPEN_COMPANION_SETTINGS_PREWARM_DELAY_MS || "1200", 10) || 0);
+const SETTINGS_PREWARM_ENABLED = process.env.OPEN_COMPANION_PREWARM_SETTINGS !== "0";
 let pullAbortController = null;
+let pythonUserSiteCache = null;
+const ollamaRuntimeCache = createOllamaRuntimeCache({ fetchImpl: (url, options) => fetch(url, options) });
 const DEFAULT_MEMORY_TOPICS = {
   "memory.md": "# Memory\n",
 };
@@ -824,14 +829,12 @@ async function listProviderModels(providerName, options = {}) {
   }
 }
 
-function buildPythonSubprocessEnv() {
-  const pythonCommand = getPythonCommand();
-  const env = runtimePaths.buildBackendEnvironment();
-  env.PYTHONUTF8 = "1";
-  env.PYTHONIOENCODING = "utf-8";
-  env.OPEN_COMPANION_NODE_PATH = process.execPath;
-  env.OPEN_COMPANION_NODE_MODE = "electron";
+function resolvePythonUserSite(pythonCommand) {
+  if (pythonUserSiteCache && pythonUserSiteCache.pythonCommand === pythonCommand) {
+    return pythonUserSiteCache.userSite;
+  }
 
+  let userSite = null;
   try {
     const probe = spawnSync(pythonCommand, ["-m", "site", "--user-site"], {
       cwd: PROJECT_ROOT,
@@ -845,19 +848,32 @@ function buildPythonSubprocessEnv() {
         .map((line) => line.trim())
         .filter(Boolean)
         .pop();
-
-      if (userSite) {
-        const existing = String(env.PYTHONPATH || "")
-          .split(path.delimiter)
-          .map((entry) => entry.trim())
-          .filter(Boolean);
-        env.PYTHONPATH = [userSite, ...existing].filter((entry, index, entries) => entries.indexOf(entry) === index).join(path.delimiter);
-      }
     } else if ((probe.stderr || "").trim()) {
       console.warn("Failed to resolve Python user site:", String(probe.stderr || "").trim());
     }
   } catch (error) {
     console.warn("Failed to build Python subprocess env:", error.message);
+  }
+
+  pythonUserSiteCache = { pythonCommand, userSite };
+  return userSite;
+}
+
+function buildPythonSubprocessEnv() {
+  const pythonCommand = getPythonCommand();
+  const env = runtimePaths.buildBackendEnvironment();
+  env.PYTHONUTF8 = "1";
+  env.PYTHONIOENCODING = "utf-8";
+  env.OPEN_COMPANION_NODE_PATH = process.execPath;
+  env.OPEN_COMPANION_NODE_MODE = "electron";
+
+  const userSite = resolvePythonUserSite(pythonCommand);
+  if (userSite) {
+    const existing = String(env.PYTHONPATH || "")
+      .split(path.delimiter)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    env.PYTHONPATH = [userSite, ...existing].filter((entry, index, entries) => entries.indexOf(entry) === index).join(path.delimiter);
   }
 
   return { pythonCommand, env };
@@ -988,17 +1004,6 @@ async function isOllamaInstalled() {
     child.on("error", () => resolve(false));
     child.on("exit", () => resolve(true));
   });
-}
-
-function mapOllamaModelSummary(model) {
-  if (!model) {
-    return null;
-  }
-  return {
-    name: model.name,
-    size_gb: model.size_gb ?? (model.size ? (Number(model.size) / 1e9).toFixed(1) : null),
-    modified_at: model.modified_at || null,
-  };
 }
 
 const testDiagnostics = {
@@ -2489,6 +2494,9 @@ function createWindow() {
     if (mainWindowRef === mainWindow) {
       mainWindowRef = null;
     }
+    if (settingsWindow && !settingsWindow.isDestroyed() && !settingsWindow.isVisible()) {
+      settingsWindow.destroy();
+    }
   });
 
   backend.attachWindow(mainWindow);
@@ -2496,9 +2504,12 @@ function createWindow() {
 }
 
 let settingsWindow = null;
+let settingsWindowReady = false;
+let settingsWindowPendingShow = false;
 let mainWindowRef = null;
 let onboardingWindow = null;
 let updaterStarted = false;
+let appIsQuitting = false;
 
 function getMainWindow() {
   return mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
@@ -2506,6 +2517,17 @@ function getMainWindow() {
 
 function getOnboardingWindow() {
   return onboardingWindow && !onboardingWindow.isDestroyed() ? onboardingWindow : null;
+}
+
+function revealSettingsWindow({ focus = true } = {}) {
+  if (!settingsWindow || settingsWindow.isDestroyed()) {
+    return;
+  }
+  settingsWindow.setSkipTaskbar(false);
+  settingsWindow.show();
+  if (focus) {
+    settingsWindow.focus();
+  }
 }
 
 function createOnboardingWindow() {
@@ -2597,17 +2619,27 @@ function startMainOverlay() {
   if (!TEST_MODE) {
     mainWindow.once("ready-to-show", () => {
       runStartupHealthCheck(mainWindow);
+      prewarmSettingsWindow();
     });
   }
   return mainWindow;
 }
 
-function createSettingsWindow() {
+function createSettingsWindow(options = {}) {
+  const shouldShow = options.show !== false;
+  const shouldFocus = options.focus !== false;
   if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus();
-    return;
+    if (shouldShow) {
+      settingsWindowPendingShow = true;
+      if (settingsWindowReady) {
+        revealSettingsWindow({ focus: shouldFocus });
+      }
+    }
+    return settingsWindow;
   }
 
+  settingsWindowReady = false;
+  settingsWindowPendingShow = shouldShow;
   settingsWindow = new BrowserWindow({
     width: 760,
     height: 580,
@@ -2621,6 +2653,8 @@ function createSettingsWindow() {
     maximizable: false,
     minimizable: true,
     fullscreenable: false,
+    show: false,
+    skipTaskbar: !shouldShow,
     backgroundColor: "#0e0e10",
     webPreferences: {
       preload: path.join(__dirname, "settings-preload.js"),
@@ -2634,14 +2668,44 @@ function createSettingsWindow() {
   settingsWindow.setMenuBarVisibility(false);
   settingsWindow.loadFile(path.join(__dirname, "settings.html"));
   settingsWindow.once("ready-to-show", () => {
-    injectThemeIntoWindow(settingsWindow, loadConfig());
+    settingsWindowReady = true;
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      injectThemeIntoWindow(settingsWindow, loadConfig());
+      if (settingsWindowPendingShow) {
+        revealSettingsWindow({ focus: shouldFocus });
+      }
+    }
   });
   settingsWindow.webContents.once("dom-ready", () => {
     injectVersionIntoSettingsWindow(settingsWindow);
   });
+  settingsWindow.on("close", (event) => {
+    if (appIsQuitting || TEST_MODE || settingsWindow?.isDestroyed()) {
+      return;
+    }
+    event.preventDefault();
+    settingsWindowPendingShow = false;
+    settingsWindow.hide();
+    settingsWindow.setSkipTaskbar(true);
+  });
   settingsWindow.on("closed", () => {
     settingsWindow = null;
+    settingsWindowReady = false;
+    settingsWindowPendingShow = false;
   });
+  return settingsWindow;
+}
+
+function prewarmSettingsWindow() {
+  if (!SETTINGS_PREWARM_ENABLED || TEST_MODE || !loadConfig().onboarding_complete) {
+    return;
+  }
+  setTimeout(() => {
+    if (appIsQuitting || settingsWindow || !getMainWindow()) {
+      return;
+    }
+    createSettingsWindow({ show: false, focus: false });
+  }, SETTINGS_PREWARM_DELAY_MS);
 }
 
 async function runStartupHealthCheck(win) {
@@ -2991,31 +3055,8 @@ ipcMain.handle("settings:getApiKey", async (_event, { account }) => {
 });
 
 ipcMain.handle("settings:getOllamaModelInfo", async (_event, modelName) => {
-  const testState = readTestOllamaState();
-  if (testState) {
-    const info = testState.show?.[String(modelName || "").trim()] || null;
-    return info ? {
-      family: info.family || null,
-      parameter_size: info.parameter_size || null,
-      quantization_level: info.quantization_level || null,
-      context_length: info.context_length || null,
-      capabilities: Array.isArray(info.capabilities) ? info.capabilities : [],
-    } : null;
-  }
   try {
-    const response = await fetch("http://localhost:11434/api/show", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: modelName }),
-    });
-    const data = await response.json();
-    return {
-      family: data.details?.family || null,
-      parameter_size: data.details?.parameter_size || null,
-      quantization_level: data.details?.quantization_level || null,
-      context_length: _extractOllamaContextLength(data),
-      capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
-    };
+    return await ollamaRuntimeCache.getSettingsModelInfo(modelName, readTestOllamaState());
   } catch {
     return null;
   }
@@ -3030,100 +3071,17 @@ ipcMain.handle("brain:contextInfo", async () => {
 
   let modelMax = null;
   if (modelName) {
-    const testState = readTestOllamaState();
-    if (testState) {
-      const info = testState.show?.[modelName] || null;
-      modelMax = info?.context_length ? Number(info.context_length) : null;
-    } else {
-      try {
-        const response = await fetch("http://localhost:11434/api/show", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: modelName }),
-        });
-        const data = await response.json();
-        modelMax = _extractOllamaContextLength(data);
-        if (modelMax) modelMax = Number(modelMax);
-      } catch {
-        modelMax = null;
-      }
+    try {
+      modelMax = await ollamaRuntimeCache.getContextLength(modelName, readTestOllamaState());
+      if (modelMax) modelMax = Number(modelMax);
+    } catch {
+      modelMax = null;
     }
   }
 
   const current = isAuto ? (modelMax || 32768) : Number(configured);
   return { modelMax, current, isAuto };
 });
-
-function _parseOllamaParameters(parametersStr) {
-  const result = { temperature: null, topK: null, topP: null };
-  if (!parametersStr || typeof parametersStr !== "string") return result;
-  for (const line of parametersStr.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const spaceIdx = trimmed.indexOf(" ");
-    if (spaceIdx === -1) continue;
-    const key = trimmed.slice(0, spaceIdx).trim();
-    const val = trimmed.slice(spaceIdx + 1).trim().replace(/^"(.*)"$/, "$1");
-    if (key === "temperature") result.temperature = parseFloat(val) || null;
-    else if (key === "top_k") result.topK = parseFloat(val) || null;
-    else if (key === "top_p") result.topP = parseFloat(val) || null;
-  }
-  return result;
-}
-
-function _extractOllamaContextLength(data) {
-  const modelInfo = data?.model_info;
-  const candidates = [];
-  if (modelInfo && typeof modelInfo === "object") {
-    for (const [key, value] of Object.entries(modelInfo)) {
-      if (typeof key === "string" && key.endsWith(".context_length")) {
-        candidates.push(value);
-      }
-    }
-  }
-  candidates.push(data?.parameters?.num_ctx);
-  candidates.push(data?.details?.context_length);
-  for (const candidate of candidates) {
-    const value = Number(candidate);
-    if (Number.isFinite(value) && value > 0) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function _buildEnrichedModelInfo(name, data) {
-  const params = _parseOllamaParameters(data.parameters);
-  return {
-    name,
-    architecture: data.details?.family || null,
-    parameters: data.details?.parameter_size || null,
-    contextLength: _extractOllamaContextLength(data),
-    embeddingLength: data.model_info?.["llama.embedding_length"] || null,
-    quantization: data.details?.quantization_level || null,
-    capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
-    sizeGB: null,
-    temperature: params.temperature,
-    topK: params.topK,
-    topP: params.topP,
-  };
-}
-
-function _buildEnrichedModelInfoFromTestState(name, info) {
-  return {
-    name,
-    architecture: info.family || null,
-    parameters: info.parameter_size || null,
-    contextLength: info.context_length || null,
-    embeddingLength: null,
-    quantization: info.quantization_level || null,
-    capabilities: Array.isArray(info.capabilities) ? info.capabilities : [],
-    sizeGB: null,
-    temperature: null,
-    topK: null,
-    topP: null,
-  };
-}
 
 function normalizeLayerName(layerName) {
   const value = String(layerName || "").trim();
@@ -3182,96 +3140,23 @@ function resolveLayerBrainConfig(config, layerName) {
 }
 
 async function fetchOllamaShowInfo(modelName) {
-  const testState = readTestOllamaState();
-  if (testState) {
-    const info = testState.show?.[modelName] || null;
-    if (!info) {
-      return null;
-    }
-    return {
-      capabilities: Array.isArray(info.capabilities) ? info.capabilities : [],
-      contextLength: Number(info.context_length || 0) || null,
-      family: String(info.family || "").trim(),
-    };
-  }
-
-  const response = await fetch("http://localhost:11434/api/show", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: modelName }),
-  });
-  if (!response.ok) {
-    throw new Error(`Ollama returned ${response.status}`);
-  }
-  const data = await response.json();
-  return {
-    capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
-    contextLength: _extractOllamaContextLength(data),
-    family: String(data.details?.family || "").trim(),
-  };
+  return ollamaRuntimeCache.getRuntimeValidationInfo(modelName, readTestOllamaState());
 }
 
 ipcMain.handle("brain:modelInfo", async (_event, modelName) => {
   const cfg = loadConfig() || {};
   const resolvedName = String(modelName || cfg?.brain?.model || "").trim();
   if (!resolvedName) return null;
-  const testState = readTestOllamaState();
-  if (testState) {
-    const info = testState.show?.[resolvedName] || null;
-    return info ? _buildEnrichedModelInfoFromTestState(resolvedName, info) : null;
-  }
   try {
-    const response = await fetch("http://localhost:11434/api/show", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: resolvedName }),
-    });
-    const data = await response.json();
-    return _buildEnrichedModelInfo(resolvedName, data);
+    return await ollamaRuntimeCache.getEnrichedModelInfo(resolvedName, readTestOllamaState());
   } catch {
     return null;
   }
 });
 
 ipcMain.handle("brain:listPulledModels", async () => {
-  const testState = readTestOllamaState();
-  if (testState) {
-    const models = Array.isArray(testState.models) ? testState.models : [];
-    return models.map((m) => {
-      const name = String(m?.name || "").trim();
-      const info = testState.show?.[name] || {};
-      const base = _buildEnrichedModelInfoFromTestState(name, info);
-      base.sizeGB = m.size_gb ?? (m.size ? (Number(m.size) / 1e9).toFixed(1) : null);
-      base.modifiedAt = m.modified_at || null;
-      return base;
-    }).filter((m) => m.name);
-  }
   try {
-    const tagsResp = await fetch("http://localhost:11434/api/tags");
-    const tagsData = await tagsResp.json();
-    const tagModels = tagsData.models || [];
-    const enriched = await Promise.all(
-      tagModels.map(async (m) => {
-        const name = String(m.name || "").trim();
-        const sizeGB = m.size ? (Number(m.size) / 1e9).toFixed(1) : null;
-        const modifiedAt = m.modified_at || null;
-        try {
-          const showResp = await fetch("http://localhost:11434/api/show", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name }),
-          });
-          const showData = await showResp.json();
-          const base = _buildEnrichedModelInfo(name, showData);
-          base.sizeGB = sizeGB;
-          base.modifiedAt = modifiedAt;
-          return base;
-        } catch {
-          return { name, architecture: null, parameters: null, contextLength: null, embeddingLength: null, quantization: null, capabilities: [], sizeGB, modifiedAt, temperature: null, topK: null, topP: null };
-        }
-      })
-    );
-    return enriched;
+    return await ollamaRuntimeCache.listPulledModels(readTestOllamaState());
   } catch {
     return [];
   }
@@ -3372,27 +3257,9 @@ ipcMain.handle("brain:activeModelCapabilities", async (_event, layerName) => {
     return value.includes("vision") || value.includes("image");
   });
 
-  const testState = readTestOllamaState();
-  if (testState) {
-    const capabilities = Array.isArray(testState.show?.[modelName]?.capabilities)
-      ? testState.show[modelName].capabilities
-      : [];
-    return {
-      capabilities,
-      supportsImageInput: hasImageInputCapability(capabilities),
-      provider: resolved.provider,
-      model: modelName,
-    };
-  }
-
   try {
-    const response = await fetch("http://localhost:11434/api/show", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: modelName }),
-    });
-    const data = await response.json();
-    const capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+    const ollamaInfo = await fetchOllamaShowInfo(modelName);
+    const capabilities = Array.isArray(ollamaInfo?.capabilities) ? ollamaInfo.capabilities : [];
     return {
       capabilities,
       supportsImageInput: hasImageInputCapability(capabilities),
@@ -3641,14 +3508,8 @@ ipcMain.handle("ui:setLayerReasoningEffort", async (_event, layerName, effort) =
 });
 
 ipcMain.handle("settings:getOllamaRunningModels", async () => {
-  const testState = readTestOllamaState();
-  if (testState) {
-    return Array.isArray(testState.running_models) ? testState.running_models : [];
-  }
   try {
-    const response = await fetch("http://localhost:11434/api/ps");
-    const data = await response.json();
-    return data.models || [];
+    return await ollamaRuntimeCache.listRunningModels(readTestOllamaState());
   } catch {
     return [];
   }
@@ -3944,20 +3805,8 @@ ipcMain.handle("backend:dndCancel", async () => {
 });
 
 ipcMain.handle("settings:getOllamaModels", async () => {
-  const testState = readTestOllamaState();
-  if (testState) {
-    return Array.isArray(testState.models)
-      ? testState.models.map(mapOllamaModelSummary).filter(Boolean)
-      : [];
-  }
   try {
-    const resp = await fetch("http://localhost:11434/api/tags");
-    const json = await resp.json();
-    return (json.models || []).map((m) => ({
-      name: m.name,
-      size_gb: m.size ? (m.size / 1e9).toFixed(1) : null,
-      modified_at: m.modified_at || null,
-    }));
+    return await ollamaRuntimeCache.listModelSummaries(readTestOllamaState());
   } catch {
     return [];
   }
@@ -4197,6 +4046,12 @@ ipcMain.handle("heartbeat:stop", async () => {
 ipcMain.handle("settings:close", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win && !win.isDestroyed()) {
+    if (win === settingsWindow && !TEST_MODE) {
+      settingsWindowPendingShow = false;
+      win.hide();
+      win.setSkipTaskbar(true);
+      return;
+    }
     win.close();
   }
 });
@@ -4567,13 +4422,39 @@ const CHATGPT_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CHATGPT_OAUTH_REDIRECT_URI = "http://localhost:1455/auth/callback";
 const CHATGPT_OAUTH_CALLBACK_PORT = 1455;
 const CHATGPT_OAUTH_SCOPE = "openid profile email offline_access";
-const CHATGPT_OAUTH_ORIGINATOR = process.env.CHATGPT_OAUTH_ORIGINATOR || "openclaw";
+const CHATGPT_OAUTH_REQUIRED_SCOPES = [];
+const CHATGPT_OAUTH_ORIGINATOR = process.env.CHATGPT_OAUTH_ORIGINATOR || "opencompanion";
 const CHATGPT_OAUTH_AUTH_CLAIM = "https://api.openai.com/auth";
-const CHATGPT_KR_SERVICE = "OpenCompanion";
+function buildProfileScopedKeychainService(suffix) {
+  const profileRoot = path.resolve(runtimePaths.PROFILE_ROOT || runtimePaths.PROJECT_ROOT || ".");
+  const digest = crypto.createHash("sha256").update(profileRoot.toLowerCase()).digest("hex").slice(0, 12);
+  return `${KEYCHAIN_SERVICE}:${suffix}:${digest}`;
+}
+
+const CHATGPT_KR_SERVICE = String(
+  process.env.OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE ||
+  buildProfileScopedKeychainService("chatgpt-oauth")
+).trim();
+const CHATGPT_KR_DELETE_SERVICES = Array.from(new Set([
+  CHATGPT_KR_SERVICE,
+  KEYCHAIN_SERVICE,
+  LEGACY_KEYCHAIN_SERVICE,
+]));
 const CHATGPT_KR_ACCESS = "chatgpt_oauth_access";
 const CHATGPT_KR_REFRESH = "chatgpt_oauth_refresh";
 const CHATGPT_KR_EXPIRES = "chatgpt_oauth_expires";
 const CHATGPT_KR_ACCOUNT = "chatgpt_oauth_account_id";
+const CHATGPT_KR_ID_TOKEN = "chatgpt_oauth_id_token";
+const CHATGPT_KR_API_KEY = "chatgpt_oauth_api_key";
+const CHATGPT_KR_ACCOUNTS = [
+  CHATGPT_KR_ACCESS,
+  CHATGPT_KR_REFRESH,
+  CHATGPT_KR_EXPIRES,
+  CHATGPT_KR_ACCOUNT,
+  CHATGPT_KR_ID_TOKEN,
+  CHATGPT_KR_API_KEY,
+];
+process.env.OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE = CHATGPT_KR_SERVICE;
 
 function requireChatGptOauthClientId() {
   if (CHATGPT_OAUTH_CLIENT_ID) {
@@ -4607,6 +4488,110 @@ function _chatgptExtractAccountId(accessToken) {
     return accountId;
   }
   return String(payload?.sub || "").trim();
+}
+
+function _chatgptTokenScopes(accessToken) {
+  const payload = _chatgptDecodeJwtPayload(accessToken);
+  const rawScopes = payload?.scp || payload?.scope || payload?.scopes;
+  if (Array.isArray(rawScopes)) {
+    return rawScopes.map((scope) => String(scope || "").trim()).filter(Boolean);
+  }
+  if (typeof rawScopes === "string") {
+    return rawScopes.split(/\s+/).map((scope) => scope.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function _chatgptMissingRequiredScopes(accessToken) {
+  const scopes = new Set(_chatgptTokenScopes(accessToken));
+  return CHATGPT_OAUTH_REQUIRED_SCOPES.filter((scope) => !scopes.has(scope));
+}
+
+function _chatgptEscapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function _chatgptAllowedCallbackHost(req) {
+  const rawHost = String(req?.headers?.host || "").trim();
+  if (!rawHost) {
+    return false;
+  }
+  try {
+    const hostname = new URL(`http://${rawHost}`).hostname.toLowerCase();
+    return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname);
+  } catch {
+    return false;
+  }
+}
+
+function _chatgptSendCallbackPage(res, ok, message) {
+  const title = ok ? "Connected" : "Connection failed";
+  const color = ok ? "#2f8f58" : "#a43d3d";
+  res.writeHead(ok ? 200 : 400, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(
+    "<!doctype html><html><head><meta charset='utf-8'><title>OpenCompanion OAuth</title></head>" +
+    "<body style='font-family:sans-serif;text-align:center;padding:60px;background:#111;color:#f4f0ff'>" +
+    `<h2 style='color:${color}'>${_chatgptEscapeHtml(title)}</h2>` +
+    `<p>${_chatgptEscapeHtml(message)}</p>` +
+    "<p>You can close this tab and return to OpenCompanion.</p>" +
+    "</body></html>"
+  );
+}
+
+async function _chatgptReadSecret(account) {
+  const value = await readKeychainPassword(CHATGPT_KR_SERVICE, account);
+  if (value != null && String(value).trim()) {
+    return String(value);
+  }
+  return null;
+}
+
+async function _chatgptWriteSecret(account, value) {
+  const cleanValue = String(value || "").trim();
+  if (cleanValue) {
+    await keytar.setPassword(CHATGPT_KR_SERVICE, account, cleanValue);
+  } else {
+    await deleteKeychainPassword(CHATGPT_KR_SERVICE, account);
+  }
+  await Promise.all(
+    CHATGPT_KR_DELETE_SERVICES
+      .filter((service) => service !== CHATGPT_KR_SERVICE)
+      .map((service) => deleteKeychainPassword(service, account))
+  );
+}
+
+async function _chatgptReadTokenStore() {
+  const [access, refresh, expires, accountId] = await Promise.all([
+    _chatgptReadSecret(CHATGPT_KR_ACCESS),
+    _chatgptReadSecret(CHATGPT_KR_REFRESH),
+    _chatgptReadSecret(CHATGPT_KR_EXPIRES),
+    _chatgptReadSecret(CHATGPT_KR_ACCOUNT),
+  ]);
+  return { access, refresh, expires, accountId };
+}
+
+async function _chatgptWriteTokenStore({ accessToken, refreshToken, expiresMs, accountId }) {
+  await Promise.all([
+    _chatgptWriteSecret(CHATGPT_KR_ACCESS, accessToken),
+    _chatgptWriteSecret(CHATGPT_KR_REFRESH, refreshToken),
+    _chatgptWriteSecret(CHATGPT_KR_EXPIRES, String(expiresMs || "")),
+    _chatgptWriteSecret(CHATGPT_KR_ACCOUNT, accountId),
+    _chatgptWriteSecret(CHATGPT_KR_ID_TOKEN, ""),
+    _chatgptWriteSecret(CHATGPT_KR_API_KEY, ""),
+  ]);
+}
+
+async function _chatgptDeleteTokenStore() {
+  await Promise.all(
+    CHATGPT_KR_ACCOUNTS.flatMap((account) => (
+      CHATGPT_KR_DELETE_SERVICES.map((service) => deleteKeychainPassword(service, account))
+    ))
+  );
 }
 
 async function _chatgptExchangeCode(code, codeVerifier) {
@@ -4662,16 +4647,36 @@ ipcMain.handle("oauth:chatgpt:login", async () => {
 
   return new Promise((resolve) => {
     let server = null;
-    const timeout = setTimeout(() => {
-      console.warn("[ChatGPT OAuth] Login timed out waiting for callback");
+    let settled = false;
+    let timeout = null;
+
+    const settle = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
       try { server?.close(); } catch {}
-      resolve({ ok: false, error: "OAuth login timed out (2 minutes). Please try again." });
+      resolve(result);
+    };
+
+    timeout = setTimeout(() => {
+      console.warn("[ChatGPT OAuth] Login timed out waiting for callback");
+      settle({ ok: false, error: "OAuth login timed out (2 minutes). Please try again." });
     }, 120_000);
 
     try {
       server = http.createServer(async (req, res) => {
         console.info(`[ChatGPT OAuth] Callback request received: ${req.url || ""}`);
-        const url = new URL(req.url, `http://localhost:${CHATGPT_OAUTH_CALLBACK_PORT}`);
+        if (!_chatgptAllowedCallbackHost(req)) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Forbidden OAuth callback host.");
+          return;
+        }
+
+        const url = new URL(req.url || "/", CHATGPT_OAUTH_REDIRECT_URI);
         if (url.pathname !== "/auth/callback") {
           res.writeHead(404);
           res.end();
@@ -4682,32 +4687,27 @@ ipcMain.handle("oauth:chatgpt:login", async () => {
         const returnedState = url.searchParams.get("state");
         const error = url.searchParams.get("error");
 
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(
-          "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>" +
-          "<h2>Connected!</h2><p>You can close this tab and return to OpenCompanion.</p>" +
-          "</body></html>"
-        );
-
-        clearTimeout(timeout);
-        server.close();
-
         if (error) {
           console.warn(`[ChatGPT OAuth] Provider returned error: ${error}`);
-          resolve({ ok: false, error: `OAuth error: ${error}` });
+          const message = `OAuth error: ${error}`;
+          _chatgptSendCallbackPage(res, false, message);
+          settle({ ok: false, error: message });
           return;
         }
         if (!code) {
           console.warn("[ChatGPT OAuth] Callback missing authorization code");
-          resolve({ ok: false, error: "No authorization code in callback." });
+          const message = "No authorization code in callback.";
+          _chatgptSendCallbackPage(res, false, message);
+          settle({ ok: false, error: message });
           return;
         }
         if (returnedState !== state) {
           console.warn("[ChatGPT OAuth] State mismatch during callback");
-          resolve({ ok: false, error: "OAuth state mismatch — possible CSRF. Please try again." });
+          const message = "OAuth state mismatch - possible CSRF. Please try again.";
+          _chatgptSendCallbackPage(res, false, message);
+          settle({ ok: false, error: message });
           return;
         }
-
         try {
           console.info("[ChatGPT OAuth] Exchanging authorization code for tokens");
           const tokens = await _chatgptExchangeCode(code, codeVerifier);
@@ -4719,42 +4719,38 @@ ipcMain.handle("oauth:chatgpt:login", async () => {
           // Codex OAuth stores the stable ChatGPT account id from the access token.
           const accountId = _chatgptExtractAccountId(accessToken);
 
-          await keytar.setPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_ACCESS, accessToken);
-          await keytar.setPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_REFRESH, refreshToken);
-          await keytar.setPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_EXPIRES, String(expiresMs));
-          await keytar.setPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_ACCOUNT, accountId);
+          await _chatgptWriteTokenStore({ accessToken, refreshToken, expiresMs, accountId });
 
           console.info(`[ChatGPT OAuth] Tokens stored successfully. refresh=${refreshToken ? "yes" : "no"} account=${accountId ? "yes" : "no"}`);
-          resolve({ ok: true, accountId, expiresMs });
+          _chatgptSendCallbackPage(res, true, "Your ChatGPT account is connected.");
+          settle({ ok: true, accountId, expiresMs });
         } catch (err) {
           console.error("[ChatGPT OAuth] Login failed during token exchange or keyring write:", err);
-          resolve({ ok: false, error: err.message });
+          const message = err.message || "Token exchange failed.";
+          _chatgptSendCallbackPage(res, false, message);
+          settle({ ok: false, error: message });
         }
       });
 
       server.on("error", (err) => {
-        clearTimeout(timeout);
         console.error("[ChatGPT OAuth] Callback server error:", err);
         if (err.code === "EADDRINUSE") {
-          resolve({ ok: false, error: `Port ${CHATGPT_OAUTH_CALLBACK_PORT} is already in use. Close the conflicting app and try again.` });
+          settle({ ok: false, error: `Port ${CHATGPT_OAUTH_CALLBACK_PORT} is already in use. Close the conflicting app and try again.` });
         } else {
-          resolve({ ok: false, error: `OAuth callback server error: ${err.message}` });
+          settle({ ok: false, error: `OAuth callback server error: ${err.message}` });
         }
       });
 
-      server.listen(CHATGPT_OAUTH_CALLBACK_PORT, "127.0.0.1", () => {
+      server.listen(CHATGPT_OAUTH_CALLBACK_PORT, () => {
         console.info(`[ChatGPT OAuth] Callback server listening on ${CHATGPT_OAUTH_REDIRECT_URI}`);
         shell.openExternal(authUrl.toString()).catch((err) => {
-          clearTimeout(timeout);
-          server.close();
           console.error("[ChatGPT OAuth] Failed to open browser:", err);
-          resolve({ ok: false, error: `Failed to open browser: ${err.message}` });
+          settle({ ok: false, error: `Failed to open browser: ${err.message}` });
         });
       });
     } catch (err) {
-      clearTimeout(timeout);
       console.error("[ChatGPT OAuth] Login handler setup failed:", err);
-      resolve({ ok: false, error: err.message });
+      settle({ ok: false, error: err.message });
     }
   });
 });
@@ -4762,10 +4758,7 @@ ipcMain.handle("oauth:chatgpt:login", async () => {
 ipcMain.handle("oauth:chatgpt:logout", async () => {
   try {
     console.info("[ChatGPT OAuth] Logout requested");
-    await keytar.deletePassword(CHATGPT_KR_SERVICE, CHATGPT_KR_ACCESS).catch(() => {});
-    await keytar.deletePassword(CHATGPT_KR_SERVICE, CHATGPT_KR_REFRESH).catch(() => {});
-    await keytar.deletePassword(CHATGPT_KR_SERVICE, CHATGPT_KR_EXPIRES).catch(() => {});
-    await keytar.deletePassword(CHATGPT_KR_SERVICE, CHATGPT_KR_ACCOUNT).catch(() => {});
+    await _chatgptDeleteTokenStore();
     console.info("[ChatGPT OAuth] Credentials cleared from keyring");
     return { ok: true };
   } catch (err) {
@@ -4776,10 +4769,12 @@ ipcMain.handle("oauth:chatgpt:logout", async () => {
 
 ipcMain.handle("oauth:chatgpt:status", async () => {
   try {
-    const access = await keytar.getPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_ACCESS).catch(() => null);
-    const refresh = await keytar.getPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_REFRESH).catch(() => null);
-    const expiresStr = await keytar.getPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_EXPIRES).catch(() => null);
-    const storedAccountId = await keytar.getPassword(CHATGPT_KR_SERVICE, CHATGPT_KR_ACCOUNT).catch(() => null);
+    const {
+      access,
+      refresh,
+      expires: expiresStr,
+      accountId: storedAccountId,
+    } = await _chatgptReadTokenStore();
 
     if (!access && !refresh) {
       console.info("[ChatGPT OAuth] Status requested: no stored credentials");
@@ -4796,14 +4791,18 @@ ipcMain.handle("oauth:chatgpt:status", async () => {
     }
 
     const fresh = expiresMs > Date.now() + 5 * 60 * 1000;
-    const connected = fresh || !!refresh;
-    console.info(`[ChatGPT OAuth] Status requested: connected=${connected} fresh=${fresh} hasRefresh=${!!refresh}`);
+    const missingScopes = access ? _chatgptMissingRequiredScopes(access) : [];
+    const reconnectRequired = missingScopes.length > 0;
+    const connected = (fresh || !!refresh) && !reconnectRequired;
+    console.info(`[ChatGPT OAuth] Status requested: connected=${connected} fresh=${fresh} hasRefresh=${!!refresh} missingScopes=${missingScopes.join(",") || "none"}`);
     return {
       connected,
       fresh,
       expiresMs,
       accountId: String(storedAccountId || _chatgptExtractAccountId(access) || "").trim(),
       hasRefresh: !!refresh,
+      reconnectRequired,
+      missingScopes,
     };
   } catch (err) {
     console.error("[ChatGPT OAuth] Status read failed:", err);
@@ -4819,12 +4818,17 @@ app.on("window-all-closed", () => {
   }
 });
 
+app.on("before-quit", () => {
+  appIsQuitting = true;
+});
+
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    if (loadConfig().onboarding_complete) {
-      startMainOverlay();
-    } else {
-      createOnboardingWindow();
-    }
+  if (getMainWindow() || getOnboardingWindow()) {
+    return;
+  }
+  if (loadConfig().onboarding_complete) {
+    startMainOverlay();
+  } else {
+    createOnboardingWindow();
   }
 });

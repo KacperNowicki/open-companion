@@ -102,6 +102,7 @@ logger = logging.getLogger("wrapper")
 
 MAX_TOOL_ITERATIONS = 10
 SCHEDULER_ENABLED_IN_TEST_MODE = os.environ.get("OPEN_COMPANION_TEST_ENABLE_SCHEDULER") == "1"
+VERBOSE_RUNTIME_LOGS = os.environ.get("OPEN_COMPANION_VERBOSE_RUNTIME_LOGS") == "1"
 MIN_GUARANTEED_MESSAGES = 4   # always keep at least 2 full turns
 OUTPUT_RESERVE_TOKENS = 1024  # reserved for model output
 AUTO_CTX_HEADROOM_MULTIPLIER = 1.2
@@ -478,11 +479,12 @@ class LayerSession:
                 tool_call=tool_call_payload,
                 result=content,
             )
-        print(
-            f"[TOOL RESULT] layer={self.layer_name} id={_quote_terminal_text(str(tool_call_id))} content={_quote_terminal_text(content)}",
-            file=sys.stderr,
-            flush=True,
-        )
+        if VERBOSE_RUNTIME_LOGS:
+            print(
+                f"[TOOL RESULT] layer={self.layer_name} id={_quote_terminal_text(str(tool_call_id))} content={_quote_terminal_text(content)}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     def _finalize_turn_history(self) -> None:
         adapter = self.family_adapter
@@ -549,7 +551,7 @@ class LayerSession:
         Trim conversation history to fit within context budget.
         Always keeps the system message (index 0) and never removes below
         MIN_GUARANTEED_MESSAGES tail messages.
-        Returns a trimmed copy Ã¢â‚¬â€ does not mutate self.conversation.
+        Returns a trimmed copy; does not mutate self.conversation.
         """
         output_reserve = OUTPUT_RESERVE_TOKENS
         system_tokens = context_manager.count_tokens(system_prompt)
@@ -563,14 +565,18 @@ class LayerSession:
             # Emergency: keep only the minimum tail messages
             return non_system[-MIN_GUARANTEED_MESSAGES:]
 
-        trimmed = list(non_system)
-        while (
-            len(trimmed) > MIN_GUARANTEED_MESSAGES
-            and context_manager.count_messages_tokens(trimmed) > conversation_budget
-        ):
-            trimmed.pop(0)
+        weighted_messages = [
+            (message, context_manager.count_messages_tokens([message]))
+            for message in non_system
+        ]
+        total_tokens = sum(tokens for _message, tokens in weighted_messages)
+        trim_index = 0
+        last_trim_index = max(0, len(weighted_messages) - MIN_GUARANTEED_MESSAGES)
+        while trim_index < last_trim_index and total_tokens > conversation_budget:
+            total_tokens -= weighted_messages[trim_index][1]
+            trim_index += 1
 
-        return trimmed
+        return [message for message, _tokens in weighted_messages[trim_index:]]
 
     def _resolve_working_context_window(self, max_ctx_window: int, required_tokens: int) -> int:
         active_brain_config = brain.get_layer_brain_config(self.config, self.layer_name)
@@ -643,36 +649,37 @@ class LayerSession:
         trimmed_history_tokens = context_manager.count_messages_tokens(trimmed_history)
         prompt_tokens_estimate = system_tokens + trimmed_history_tokens
         messages = [{"role": "system", "content": system_msg}] + trimmed_history
-        for message in messages:
-            _log_terminal_message("BRAIN OUT", self.layer_name, message)
-        print(
-            f"[BRAIN OUT META] layer={self.layer_name} allow_tools={allow_tools} tools={len(tool_definitions) if tool_definitions else 0}",
-            file=sys.stderr,
-            flush=True,
-        )
-        print(
-            "[BRAIN BUDGET] "
-            f"layer={self.layer_name} "
-            f"provider={resolved_provider!r} "
-            f"family={getattr(self.family_adapter, 'family', 'generic')!r} "
-            f"model={resolved_model!r} "
-            f"ctx_window={max_ctx_window} "
-            f"num_ctx={resolved_num_ctx if resolved_num_ctx is not None else 'n/a'} "
-            f"temperature={resolved_temperature} "
-            f"top_p={resolved_ollama_options.get('top_p', 'n/a')} "
-            f"top_k={resolved_ollama_options.get('top_k', 'n/a')} "
-            f"max_tokens={active_brain_config.get('max_tokens', 1024)} "
-            f"output_reserve={OUTPUT_RESERVE_TOKENS} "
-            f"system_tokens={system_tokens} "
-            f"input_tokens={input_tokens} "
-            f"raw_history_tokens={raw_history_tokens} "
-            f"trimmed_history_tokens={trimmed_history_tokens} "
-            f"prompt_estimate={prompt_tokens_estimate} "
-            f"raw_messages={len(raw_history)} "
-            f"trimmed_messages={len(trimmed_history)}",
-            file=sys.stderr,
-            flush=True,
-        )
+        if VERBOSE_RUNTIME_LOGS:
+            for message in messages:
+                _log_terminal_message("BRAIN OUT", self.layer_name, message)
+            print(
+                f"[BRAIN OUT META] layer={self.layer_name} allow_tools={allow_tools} tools={len(tool_definitions) if tool_definitions else 0}",
+                file=sys.stderr,
+                flush=True,
+            )
+            print(
+                "[BRAIN BUDGET] "
+                f"layer={self.layer_name} "
+                f"provider={resolved_provider!r} "
+                f"family={getattr(self.family_adapter, 'family', 'generic')!r} "
+                f"model={resolved_model!r} "
+                f"ctx_window={max_ctx_window} "
+                f"num_ctx={resolved_num_ctx if resolved_num_ctx is not None else 'n/a'} "
+                f"temperature={resolved_temperature} "
+                f"top_p={resolved_ollama_options.get('top_p', 'n/a')} "
+                f"top_k={resolved_ollama_options.get('top_k', 'n/a')} "
+                f"max_tokens={active_brain_config.get('max_tokens', 1024)} "
+                f"output_reserve={OUTPUT_RESERVE_TOKENS} "
+                f"system_tokens={system_tokens} "
+                f"input_tokens={input_tokens} "
+                f"raw_history_tokens={raw_history_tokens} "
+                f"trimmed_history_tokens={trimmed_history_tokens} "
+                f"prompt_estimate={prompt_tokens_estimate} "
+                f"raw_messages={len(raw_history)} "
+                f"trimmed_messages={len(trimmed_history)}",
+                file=sys.stderr,
+                flush=True,
+            )
         # Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
         if os.environ.get("OC_DEBUG_PROMPTS"):
@@ -836,11 +843,12 @@ class LayerSession:
             tool_name = tool_call.function.name
             tool_call_id = tool_call.id
 
-            print(
-                f"[TOOL CALL] layer={self.layer_name} id={tool_call_id!r} name={tool_name!r} arguments={_truncate_terminal_text(json.dumps(arguments, ensure_ascii=False))!r}",
-                file=sys.stderr,
-                flush=True,
-            )
+            if VERBOSE_RUNTIME_LOGS:
+                print(
+                    f"[TOOL CALL] layer={self.layer_name} id={tool_call_id!r} name={tool_name!r} arguments={_truncate_terminal_text(json.dumps(arguments, ensure_ascii=False))!r}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
             budget = resolve_budget(self.layer_name)
             self._turn_total_tool_calls += 1
@@ -1318,7 +1326,7 @@ class LayeredRuntime:
         if event_type != "assistant_message":
             return session._drain_side_events() + [event]
 
-        if session is self.companion_session:
+        if session is self.companion_session and VERBOSE_RUNTIME_LOGS:
             print(
                 f"[ASSISTANT] {_quote_terminal_text(str(event.get('content', '') or ''))}",
                 file=sys.stderr, flush=True,
@@ -1350,7 +1358,8 @@ class LayeredRuntime:
         if self._busy():
             raise RuntimeError("Cannot accept a new message while layered work is still in progress.")
         self._await_companion_warmup()
-        print(f"[USER] {_quote_terminal_text(user_input)}", file=sys.stderr, flush=True)
+        if VERBOSE_RUNTIME_LOGS:
+            print(f"[USER] {_quote_terminal_text(user_input)}", file=sys.stderr, flush=True)
         tool_config = self._refresh_config()
         self.companion_session.config = tool_config
         reply_id = self._next_reply_id("companion")

@@ -30,8 +30,63 @@ Use `docs/ARCHITECTURE.md` for durable runtime/config/safety decisions. Use this
 - Windows packaging uses `app/frontend/assets/brand/icon.ico`, the runtime sets AppUserModelID `com.opencompanion.app`, and `app/scripts/electron-builder-after-pack.js` stamps the unpacked executable with `rcedit.exe` so taskbar/shortcut identity does not fall back to Electron.
 - Keep `signAndEditExecutable: false` unless the Windows build environment can extract `winCodeSign`; the default electron-builder resource-edit path failed on this machine because the current user cannot create the symlinks in the `winCodeSign` package.
 - Public support wording should use optional support/tip/supporter-token language, not donation/charity language.
+- Runtime performance pass is in place: conversation trimming is linear, noisy per-turn stderr logging is opt-in via `OPEN_COMPANION_VERBOSE_RUNTIME_LOGS=1`, vault list/search stream through files, memory embeddings persist in a bounded sidecar cache, scheduler reminder parsing is mtime/size cached, Electron Ollama metadata calls share a short-lived cache, Python user-site probing is cached per Python command, and Settings can prewarm in a hidden reusable window after overlay startup.
+- The overlay scene now shows an in-scene loading veil while the TalkingHead avatar initializes, then reveals the avatar after the readiness promise resolves and a paint tick completes. Load failures keep a compact unavailable state visible instead of leaving a blank scene.
+- Public-clone integration fixtures no longer require an ignored root `config.json`; memory, file-tool, and context-lifecycle tests seed a minimal config when needed.
+- ChatGPT OAuth credentials are now profile-scoped in the OS keychain through `OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE`, and both Electron and direct Python default the base keychain service to `open-companion`. The app no longer treats legacy global `OpenCompanion` OAuth tokens as an active login for a different worktree, while disconnect still clears current and legacy OAuth slots. Backend refresh uses the same form-encoded token grant as login and stores only access/refresh/expires/account-id values.
+- ChatGPT OAuth now matches the OpenClaw/pi-ai Codex OAuth shape: it requests `openid profile email offline_access`, keeps the `id_token_add_organizations`, `codex_cli_simplified_flow`, and originator authorize hints, and extracts `chatgpt_account_id` from the access token instead of requiring an ID token.
+- ChatGPT OAuth model calls use the ChatGPT Codex responses endpoint directly with the stored OAuth access token: `https://chatgpt.com/backend-api/codex/responses` and `wss://chatgpt.com/backend-api/codex/responses`. There is no ID-token-to-OpenAI-API-key exchange. WebSocket calls use a persistent Node bridge process, send `chatgpt-account-id`, `originator: pi`, a `pi (...)` user agent, and `OpenAI-Beta: responses_websockets=2026-02-06`, omit `max_output_tokens`, and preserve `store=false` continuation for tool-result follow-ups. WebSocket failures still fall back to the ChatGPT Codex SSE endpoint with `OpenAI-Beta: responses=experimental`.
+- A tracked/unignored credential scan found no actual ChatGPT OAuth tokens, JWTs, bearer tokens, or API keys in the public worktree. The previously visible OAuth login came from Windows Credential Manager under the old global `OpenCompanion` service, not from repository files.
 
 ## Verification
+
+Latest verification on 2026-05-10:
+
+```bash
+python -m py_compile app/backend/memory.py app/backend/scheduler.py app/backend/tools/builtin/files.py app/backend/wrapper.py app/backend/wrapper_text.py app/backend/providers/gemma.py app/tests/integration/test_memory.py app/tests/integration/test_scheduler_realistic.py
+node --check app/frontend/main.js
+node --check app/frontend/main/ollama-cache.js
+node --check app/tests/config.test.js
+node app/tests/config.test.js
+python app/tests/integration/test_memory.py
+python app/tests/integration/test_file_tools.py
+python app/tests/integration/test_scheduler_realistic.py
+npm test
+npm run test:integration
+npm run test:settings-ui -- --output app/tests/test-results-playwright-settings-prewarm-rerun
+node --check app/frontend/renderer.js
+node app/tests/config.test.js
+git diff --check
+npm run test:settings-ui -- --output app/tests/test-results-playwright-scene-loading
+node --check app/frontend/main.js
+python -m py_compile app/backend/providers/chatgpt_oauth.py app/tests/integration/test_providers.py
+python app/tests/integration/test_providers.py
+npm test
+git diff --check
+npm run test:settings-ui -- --output app/tests/test-results-playwright-oauth-profile-keychain
+node --check app/backend/chatgpt_oauth_ws_bridge.js
+python -m py_compile app/backend/providers/chatgpt_oauth.py app/tests/integration/test_providers.py
+node --check app/tests/config.test.js
+node app/tests/config.test.js
+python app/tests/integration/test_providers.py
+node -e "<inline local ws-server smoke for app/backend/chatgpt_oauth_ws_bridge.js persistent two-turn reuse>"
+npm test
+npm run test:integration
+git diff --check
+node --check app/frontend/main.js
+node --check app/frontend/settings-renderer.js
+node --check app/backend/chatgpt_oauth_ws_bridge.js
+python -m py_compile app/backend/runtime_paths.py app/backend/providers/chatgpt_oauth.py app/tests/integration/test_providers.py
+node app/tests/config.test.js
+python app/tests/integration/test_providers.py
+python -c "<redacted ChatGPT OAuth keychain/scope probe>"
+npm test
+npm run test:integration
+git diff --check
+python -c "<redacted live ChatGPT OAuth WebSocket probe>"
+```
+
+All commands passed. `git diff --check` emitted only line-ending normalization warnings. A redacted repository scan also reported: `No credential-shaped values found in scanned repo files.` The latest live ChatGPT OAuth WebSocket probe used the stored profile-scoped OAuth token against `wss://chatgpt.com/backend-api/codex/responses` and returned `{"ok": true, "content": "websocket ok", "tool_calls": 0, "response_id_present": true}`.
 
 Last known verification set:
 

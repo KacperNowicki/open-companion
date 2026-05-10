@@ -93,6 +93,10 @@ _scheduler_lock = threading.RLock()
 _scheduler_thread: threading.Thread | None = None
 _scheduler_stop = threading.Event()
 _scheduler_emit = None
+_todo_cache_signature: tuple[str, bool, int, int] | None = None
+_todo_cache_reminders: list["Reminder"] = []
+_schedule_cache_signature: tuple[str, bool, int, int] | None = None
+_schedule_cache_reminders: list["Reminder"] = []
 
 
 @dataclass(slots=True)
@@ -108,6 +112,49 @@ class Reminder:
     line_number: int | None = None
     fired_marked: bool = False
     original_due_at: datetime | None = None
+
+
+def _path_signature(path) -> tuple[str, bool, int, int]:
+    try:
+        resolved = str(path.resolve())
+    except OSError:
+        resolved = str(path)
+    try:
+        stat = path.stat()
+    except OSError:
+        return resolved, False, 0, 0
+    return resolved, True, stat.st_mtime_ns, stat.st_size
+
+
+def _clone_reminder(reminder: Reminder) -> Reminder:
+    return Reminder(
+        reminder_id=reminder.reminder_id,
+        text=reminder.text,
+        due_at=reminder.due_at,
+        source=reminder.source,
+        recurring=reminder.recurring,
+        cron_expression=reminder.cron_expression,
+        interval_weeks=reminder.interval_weeks,
+        interval_years=reminder.interval_years,
+        line_number=reminder.line_number,
+        fired_marked=reminder.fired_marked,
+        original_due_at=reminder.original_due_at,
+    )
+
+
+def _clone_reminders(reminders: list[Reminder]) -> list[Reminder]:
+    return [_clone_reminder(reminder) for reminder in reminders]
+
+
+def _invalidate_reminder_caches() -> None:
+    global _todo_cache_signature, _todo_cache_reminders
+    global _schedule_cache_signature, _schedule_cache_reminders
+
+    with _scheduler_lock:
+        _todo_cache_signature = None
+        _todo_cache_reminders = []
+        _schedule_cache_signature = None
+        _schedule_cache_reminders = []
 
 
 def _now() -> datetime:
@@ -352,6 +399,7 @@ def add_reminder(text: str, due_at: str) -> Reminder:
     if existing and not existing.endswith("\n"):
         existing += "\n"
     TODO_PATH.write_text(existing + line + "\n", encoding="utf-8")
+    _invalidate_reminder_caches()
     return Reminder(
         reminder_id=_stable_reminder_id(clean_text),
         text=clean_text,
@@ -377,6 +425,7 @@ def add_recurring_reminder(text: str, schedule: str) -> Reminder:
     if existing and not existing.endswith("\n"):
         existing += "\n"
     SCHEDULE_PATH.write_text(existing + line + "\n", encoding="utf-8")
+    _invalidate_reminder_caches()
     return Reminder(
         reminder_id=_stable_reminder_id(clean_text),
         text=clean_text,
@@ -395,6 +444,7 @@ def _ensure_schedule_file() -> None:
     SCHEDULE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not SCHEDULE_PATH.exists():
         SCHEDULE_PATH.write_text(STARTER_SCHEDULE_MD, encoding="utf-8")
+        _invalidate_reminder_caches()
 
 
 def _load_state() -> dict[str, dict]:
@@ -687,50 +737,88 @@ def _latest_recurring_occurrence(reminder: Reminder, now_value: datetime) -> dat
     return None
 
 
-def _todo_reminders(state: dict[str, dict]) -> list[Reminder]:
-    if not TODO_PATH.exists():
-        return []
+def _cached_todo_reminders() -> list[Reminder]:
+    global _todo_cache_signature, _todo_cache_reminders
 
-    reminders: list[Reminder] = []
-    for index, line in enumerate(TODO_PATH.read_text(encoding="utf-8").splitlines(), start=1):
-        match = _TODO_REMINDER_RE.match(line)
-        if not match:
-            continue
-        if match.group("checked").lower() == "x":
-            continue
-        text = str(match.group("text") or "").strip()
-        due_at = _parse_datetime(match.group("when"))
-        if not text or due_at is None:
-            logger.warning("Skipping invalid todo reminder on line %s of %s", index, TODO_PATH)
-            continue
+    signature = _path_signature(TODO_PATH)
+    with _scheduler_lock:
+        if signature == _todo_cache_signature:
+            return _clone_reminders(_todo_cache_reminders)
 
-        reminder_id = _stable_reminder_id(text)
-        entry = state.get(reminder_id, {})
-        snoozed_until = _parse_datetime(entry.get("snoozed_until"))
-        fired_marked = "~fired" in str(match.group("suffix") or "")
-        if fired_marked and snoozed_until is None:
-            continue
+    if not signature[1]:
+        parsed: list[Reminder] = []
+    else:
+        parsed = []
+        try:
+            lines = TODO_PATH.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            lines = []
 
-        reminders.append(
-            Reminder(
-                reminder_id=reminder_id,
-                text=text,
-                due_at=snoozed_until or due_at,
-                source="todo",
-                recurring=False,
-                line_number=index,
-                fired_marked=fired_marked,
-                original_due_at=due_at,
+        for index, line in enumerate(lines, start=1):
+            match = _TODO_REMINDER_RE.match(line)
+            if not match:
+                continue
+            if match.group("checked").lower() == "x":
+                continue
+            text = str(match.group("text") or "").strip()
+            due_at = _parse_datetime(match.group("when"))
+            if not text or due_at is None:
+                logger.warning("Skipping invalid todo reminder on line %s of %s", index, TODO_PATH)
+                continue
+
+            parsed.append(
+                Reminder(
+                    reminder_id=_stable_reminder_id(text),
+                    text=text,
+                    due_at=due_at,
+                    source="todo",
+                    recurring=False,
+                    line_number=index,
+                    fired_marked="~fired" in str(match.group("suffix") or ""),
+                    original_due_at=due_at,
+                )
             )
-        )
+
+    with _scheduler_lock:
+        _todo_cache_signature = signature
+        _todo_cache_reminders = _clone_reminders(parsed)
+    return _clone_reminders(parsed)
+
+
+def _todo_reminders(state: dict[str, dict]) -> list[Reminder]:
+    reminders: list[Reminder] = []
+    for reminder in _cached_todo_reminders():
+        entry = state.get(reminder.reminder_id, {})
+        snoozed_until = _parse_datetime(entry.get("snoozed_until"))
+        if reminder.fired_marked and snoozed_until is None:
+            continue
+        if snoozed_until is not None:
+            reminder.due_at = snoozed_until
+        reminders.append(reminder)
     return reminders
 
 
 def _schedule_reminders() -> list[Reminder]:
+    return _cached_schedule_reminders()
+
+
+def _cached_schedule_reminders() -> list[Reminder]:
+    global _schedule_cache_signature, _schedule_cache_reminders
+
     _ensure_schedule_file()
+    signature = _path_signature(SCHEDULE_PATH)
+    with _scheduler_lock:
+        if signature == _schedule_cache_signature:
+            return _clone_reminders(_schedule_cache_reminders)
+
     reminders: list[Reminder] = []
     in_html_comment = False
-    for index, line in enumerate(SCHEDULE_PATH.read_text(encoding="utf-8").splitlines(), start=1):
+    try:
+        lines = SCHEDULE_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+
+    for index, line in enumerate(lines, start=1):
         stripped = line.strip()
         if "<!--" in stripped:
             in_html_comment = True
@@ -767,7 +855,11 @@ def _schedule_reminders() -> list[Reminder]:
                 original_due_at=None,
             )
         )
-    return reminders
+
+    with _scheduler_lock:
+        _schedule_cache_signature = signature
+        _schedule_cache_reminders = _clone_reminders(reminders)
+    return _clone_reminders(reminders)
 
 
 def _mark_todo_fired(reminder: Reminder) -> None:
@@ -783,6 +875,7 @@ def _mark_todo_fired(reminder: Reminder) -> None:
         return
     lines[line_index] = f"{line} ~fired"
     TODO_PATH.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    _invalidate_reminder_caches()
     reminder.fired_marked = True
 
 

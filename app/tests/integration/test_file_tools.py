@@ -42,6 +42,38 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _base_config() -> dict:
+    config_path = ROOT / "config.json"
+    if config_path.exists():
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    return {
+        "version": "test",
+        "vault": {"path": "./companion/vault", "enabled": True},
+        "brain": {
+            "provider": "gemma",
+            "model": "qwen2.5:14b",
+            "layers": {
+                "companion": {},
+                "assistant": {},
+            },
+        },
+        "memory": {"enabled": True, "embedding_enabled": True},
+        "heartbeat": {"enabled": False},
+        "voice": {"tts_enabled": False, "stt_enabled": False},
+        "layers": {
+            "companion": {"enabled": True, "permission_profile": "companion"},
+            "assistant": {"enabled": True, "permission_profile": "assistant"},
+        },
+        "tools": {
+            "overrides": {
+                "companion": {},
+                "assistant": {},
+            },
+            "custom": [],
+        },
+    }
+
+
 def _clear_modules() -> None:
     for name in MODULE_NAMES:
         sys.modules.pop(name, None)
@@ -60,7 +92,7 @@ def isolated_profile():
     SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
     temp_root = SCRATCH_ROOT / f"profile-{uuid.uuid4().hex}"
     temp_root.mkdir(parents=True, exist_ok=False)
-    _write_json(temp_root / "config.json", json.loads((ROOT / "config.json").read_text(encoding="utf-8")))
+    _write_json(temp_root / "config.json", _base_config())
     os.environ["OPEN_COMPANION_TEST_MODE"] = "1"
     os.environ["OPEN_COMPANION_TEST_PROFILE_DIR"] = str(temp_root)
     tool_registry, runtime_paths = _load_tool_modules()

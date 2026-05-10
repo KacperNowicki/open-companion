@@ -74,7 +74,7 @@ LOGS_DIR = PROFILE_ROOT / "logs"
 SOUL_DEFAULTS_DIR = PROJECT_ROOT / "companion" / "soul" / "defaults"
 VAULT_DIR = PROFILE_ROOT / "companion" / "vault"
 
-KEYCHAIN_SERVICE = os.environ.get("OPEN_COMPANION_KEYCHAIN_SERVICE", "OpenCompanion")
+KEYCHAIN_SERVICE = os.environ.get("OPEN_COMPANION_KEYCHAIN_SERVICE", "open-companion")
 
 
 def ensure_runtime_dirs() -> None:

@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from datetime import date, datetime
+from hashlib import sha256
 from pathlib import Path
 
 from runtime_paths import MEMORY_DIR, PROJECT_ROOT, ensure_runtime_dirs
@@ -338,6 +339,12 @@ _retrieval_preload_lock = threading.Lock()
 _retrieval_preload_started = False
 _retrieval_preload_completed = False
 _embedding_cache: dict[str, list[float]] = {}
+_embedding_cache_loaded = False
+_embedding_cache_dirty = False
+_embedding_cache_lock = threading.RLock()
+_EMBEDDING_CACHE_PATH = MEMORY_DIR / "embedding_cache.json"
+_EMBEDDING_CACHE_VERSION = 1
+_EMBEDDING_CACHE_MAX_ENTRIES = 2000
 
 
 def _looks_like_cloud_model(model_name: str) -> bool:
@@ -382,6 +389,93 @@ def _is_ollama_model_available(model_name: str) -> bool:
     if not normalized:
         return False
     return normalized in _get_available_ollama_models()
+
+
+def _embedding_cache_key(text: str, model: str) -> str:
+    digest = sha256()
+    digest.update(str(model or "").strip().lower().encode("utf-8", errors="replace"))
+    digest.update(b"\0")
+    digest.update(str(text or "").encode("utf-8", errors="replace"))
+    return digest.hexdigest()
+
+
+def _coerce_embedding_vector(value) -> list[float] | None:
+    if not isinstance(value, list):
+        return None
+    vector: list[float] = []
+    for item in value:
+        try:
+            vector.append(float(item))
+        except (TypeError, ValueError):
+            return None
+    return vector or None
+
+
+def _load_embedding_cache() -> None:
+    global _embedding_cache_loaded
+
+    with _embedding_cache_lock:
+        if _embedding_cache_loaded:
+            return
+
+    if not _EMBEDDING_CACHE_PATH.exists():
+        with _embedding_cache_lock:
+            _embedding_cache_loaded = True
+        return
+
+    try:
+        payload = json.loads(_EMBEDDING_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.debug("Could not read embedding cache: %s", exc)
+        with _embedding_cache_lock:
+            _embedding_cache_loaded = True
+        return
+
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if not isinstance(entries, dict):
+        with _embedding_cache_lock:
+            _embedding_cache_loaded = True
+        return
+
+    loaded: dict[str, list[float]] = {}
+    for key, raw_vector in entries.items():
+        if not isinstance(key, str):
+            continue
+        vector = _coerce_embedding_vector(raw_vector)
+        if vector is not None:
+            loaded[key] = vector
+
+    with _embedding_cache_lock:
+        _embedding_cache.update(loaded)
+        while len(_embedding_cache) > _EMBEDDING_CACHE_MAX_ENTRIES:
+            _embedding_cache.pop(next(iter(_embedding_cache)), None)
+        _embedding_cache_loaded = True
+
+
+def _save_embedding_cache_if_dirty() -> None:
+    global _embedding_cache_dirty
+
+    with _embedding_cache_lock:
+        if not _embedding_cache_dirty:
+            return
+        entries = dict(_embedding_cache)
+
+    ensure_runtime_dirs()
+    _EMBEDDING_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = _EMBEDDING_CACHE_PATH.with_name(f".{_EMBEDDING_CACHE_PATH.name}.tmp")
+    payload = {
+        "version": _EMBEDDING_CACHE_VERSION,
+        "entries": entries,
+    }
+    try:
+        temp_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        temp_path.replace(_EMBEDDING_CACHE_PATH)
+    except Exception as exc:
+        logger.debug("Could not write embedding cache: %s", exc)
+        return
+
+    with _embedding_cache_lock:
+        _embedding_cache_dirty = False
 
 
 def _normalize_provider_name(provider: str | None) -> str:
@@ -582,9 +676,15 @@ _OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 
 def _get_embedding(text: str, model: str) -> list[float] | None:
     """Call Ollama embeddings API. Returns None on any failure."""
+    global _embedding_cache_dirty
+
     clean_text = _sanitize_text_for_utf8(text)
-    if clean_text in _embedding_cache:
-        return _embedding_cache[clean_text]
+    _load_embedding_cache()
+    cache_key = _embedding_cache_key(clean_text, model)
+    with _embedding_cache_lock:
+        cached = _embedding_cache.get(cache_key)
+        if cached is not None:
+            return list(cached)
 
     payload = json.dumps({"model": model, "prompt": clean_text}).encode("utf-8")
     req = urllib.request.Request(
@@ -596,10 +696,15 @@ def _get_embedding(text: str, model: str) -> list[float] | None:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            vec = data.get("embedding")
-            if vec:
-                _embedding_cache[clean_text] = vec
-            return vec
+            vec = _coerce_embedding_vector(data.get("embedding"))
+            if vec is None:
+                return None
+            with _embedding_cache_lock:
+                _embedding_cache[cache_key] = vec
+                while len(_embedding_cache) > _EMBEDDING_CACHE_MAX_ENTRIES:
+                    _embedding_cache.pop(next(iter(_embedding_cache)), None)
+                _embedding_cache_dirty = True
+            return list(vec)
     except Exception as exc:
         logger.debug("Embedding request failed: %s", exc)
         return None
@@ -629,6 +734,8 @@ def preload_retrieval_runtime(config: dict) -> None:
         _retrieval_preload_completed = True
     except Exception:
         logger.exception("Memory retrieval preload failed")
+    finally:
+        _save_embedding_cache_if_dirty()
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -688,8 +795,10 @@ def retrieve_relevant_memories(user_message: str, config: dict, top_k: int = 5) 
         scored.append((_cosine_similarity(query_vec, entry_vec), header, entry_text))
 
     if not scored:
+        _save_embedding_cache_if_dirty()
         return load_all_memories()
 
+    _save_embedding_cache_if_dirty()
     scored.sort(key=lambda x: x[0], reverse=True)
     top = scored[:top_k]
 
@@ -816,8 +925,10 @@ def retrieve_topic_bundle_memories(
         scored.append((_cosine_similarity(query_vec, entry_vec), header, entry_text))
 
     if not scored:
+        _save_embedding_cache_if_dirty()
         return prune_memories_to_budget(load_all_memories(), budget_tokens)
 
+    _save_embedding_cache_if_dirty()
     scored.sort(key=lambda item: item[0], reverse=True)
     grouped: dict[str, list[str]] = defaultdict(list)
     for _score, header, entry_text in scored:

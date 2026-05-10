@@ -28,6 +28,9 @@ const pcDoctorCancelButtonEl = document.getElementById("pcDoctorCancelButton");
 const pcDoctorSubmitButtonEl = document.getElementById("pcDoctorSubmitButton");
 const sceneEl = document.getElementById("scene");
 const avatarHostEl = document.getElementById("avatar-host");
+const sceneLoadingEl = document.getElementById("scene-loading");
+const sceneLoadingLabelEl = document.getElementById("scene-loading-label");
+const sceneLoadingStatusEl = document.getElementById("scene-loading-status");
 const layerLabelEl = document.getElementById("layer-label");
 const historyToggleButtonEl = document.getElementById("historyToggleButton");
 const replyBoxEl = document.getElementById("replyBox");
@@ -61,6 +64,7 @@ let voiceNote = "";
 let streamingAssistantText = "";
 let latestAssistantMessageId = "";
 const talkingHead = createTalkingHeadScene(avatarHostEl || sceneEl);
+let sceneLoadState = "loading";
 let voiceCapabilities = {};
 let runtimeConfig = {
   ui: {},
@@ -92,6 +96,65 @@ function getTalkingHeadVisualState() {
     kind: "talking-head",
     ready: Boolean(talkingHead.ready),
   };
+}
+
+function getSceneLoadingName() {
+  return (companionNameEl.textContent || "Companion").trim() || "Companion";
+}
+
+function syncSceneLoadingCopy(statusText = "") {
+  if (sceneLoadingLabelEl) {
+    sceneLoadingLabelEl.textContent = `Waking ${getSceneLoadingName()}`;
+  }
+  if (statusText && sceneLoadingStatusEl) {
+    sceneLoadingStatusEl.textContent = statusText;
+  }
+}
+
+function setSceneLoadingState(nextState, statusText = "") {
+  sceneLoadState = nextState;
+  if (sceneEl) {
+    sceneEl.classList.toggle("scene-ready", nextState === "ready");
+    sceneEl.classList.toggle("scene-error", nextState === "error");
+    sceneEl.setAttribute("aria-busy", nextState === "loading" ? "true" : "false");
+  }
+
+  const fallbackStatus = nextState === "error"
+    ? "Avatar unavailable"
+    : "Preparing avatar";
+  syncSceneLoadingCopy(statusText || fallbackStatus);
+}
+
+function getSceneLoadingState() {
+  return {
+    state: sceneLoadState,
+    visible: Boolean(sceneLoadingEl) && sceneLoadState !== "ready",
+    label: sceneLoadingLabelEl?.textContent || "",
+    status: sceneLoadingStatusEl?.textContent || "",
+  };
+}
+
+function waitForNextScenePaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+async function watchTalkingHeadReady() {
+  setSceneLoadingState("loading", "Preparing avatar");
+
+  try {
+    const readyHead = await Promise.resolve(talkingHead.ready || talkingHead.load?.());
+    if (!readyHead) {
+      setSceneLoadingState("error", "Avatar unavailable");
+      return;
+    }
+    await waitForNextScenePaint();
+    setSceneLoadingState("ready", "Avatar ready");
+  } catch (error) {
+    console.warn("[renderer] scene failed to load:", error);
+    setSceneLoadingState("error", "Avatar unavailable");
+  }
 }
 
 function ensureCloseSessionButton() {
@@ -383,6 +446,7 @@ textInputEl.addEventListener("paste", async (e) => {
 if (true) {
   window.__ocOverlayTest = {
     getSceneState: () => getTalkingHeadVisualState(),
+    getSceneLoadingState: () => getSceneLoadingState(),
     getRuntimeConfig: () => runtimeConfig,
     getCompanionName: () => companionNameEl.textContent,
     getLatestReply: () => responseTextEl.textContent,
@@ -399,6 +463,8 @@ if (true) {
     navControlsPresent: () => false,
   };
 }
+
+void watchTalkingHeadReady();
 
 const voiceController = createVoiceController({
   onBackendAudio: (audioB64, text) => talkingHead.speakAudio(audioB64, text),
@@ -443,6 +509,7 @@ const voiceController = createVoiceController({
 
 function setCompanionName(name) {
   companionNameEl.textContent = name;
+  syncSceneLoadingCopy();
   textInputEl.placeholder = `Say something to ${name}…`;
 }
 

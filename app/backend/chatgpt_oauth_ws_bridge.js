@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 
 const { randomUUID } = require("crypto");
+const os = require("os");
+const readline = require("readline");
 const WebSocket = require("ws");
 
-const DEFAULT_WS_URL = "wss://api.openai.com/v1/responses";
+const DEFAULT_WS_URL = "wss://chatgpt.com/backend-api/codex/responses";
+const DEFAULT_ORIGINATOR = "pi";
+const DEFAULT_USER_AGENT = `pi (${os.platform()} ${os.release()}; ${os.arch()})`;
+const DEFAULT_RESPONSES_WEBSOCKETS_BETA = "responses_websockets=2026-02-06";
+const DONE_SENTINEL = "[DONE]";
+const TERMINAL_EVENT_TYPES = new Set([
+  "response.completed",
+  "response.failed",
+  "response.incomplete",
+  "error",
+]);
 
 function sanitizeHeaderValue(value) {
   return String(value || "")
@@ -15,25 +27,38 @@ function writeSseEvent(event) {
   process.stdout.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+function writeSseDone() {
+  process.stdout.write(`data: ${DONE_SENTINEL}\n\n`);
+}
+
 function buildHeaders(request) {
   const requestId = sanitizeHeaderValue(request.request_id || randomUUID());
   const sessionId = sanitizeHeaderValue(request.session_id || randomUUID());
   const accessToken = sanitizeHeaderValue(request.access_token || "");
+  const accountId = sanitizeHeaderValue(request.account_id || "");
   const version = sanitizeHeaderValue(request.version || "1.0.0");
-  const originator = sanitizeHeaderValue(request.originator || "openclaw");
-  return {
+  const originator = sanitizeHeaderValue(request.originator || DEFAULT_ORIGINATOR);
+  const headers = {
     Authorization: `Bearer ${accessToken}`,
-    "OpenAI-Beta": "responses-websocket=v1",
     originator,
-    version,
-    "User-Agent": sanitizeHeaderValue(
-      request.user_agent || `${originator}/${version}`,
-    ),
-    Origin: "https://chatgpt.com",
-    Referer: "https://chatgpt.com/",
+    "User-Agent": sanitizeHeaderValue(request.user_agent || DEFAULT_USER_AGENT),
     "x-client-request-id": requestId,
-    "x-openclaw-session-id": sessionId,
+    "session_id": sessionId,
   };
+  if (accountId) {
+    headers["chatgpt-account-id"] = accountId;
+  }
+  if (
+    request.beta_header !== false &&
+    process.env.OPEN_COMPANION_RESPONSES_WS_BETA_HEADER !== "0"
+  ) {
+    headers["OpenAI-Beta"] = sanitizeHeaderValue(
+      request.beta_header_value ||
+      process.env.OPEN_COMPANION_RESPONSES_WS_BETA_HEADER ||
+      DEFAULT_RESPONSES_WEBSOCKETS_BETA
+    );
+  }
+  return headers;
 }
 
 function buildPayload(request) {
@@ -59,9 +84,6 @@ function buildPayload(request) {
   if (typeof request.temperature === "number") {
     payload.temperature = request.temperature;
   }
-  if (Number.isInteger(request.max_output_tokens) && request.max_output_tokens > 0) {
-    payload.max_output_tokens = request.max_output_tokens;
-  }
   if (request.metadata && typeof request.metadata === "object") {
     payload.metadata = request.metadata;
   }
@@ -86,46 +108,127 @@ function readRequestFromStdin() {
   });
 }
 
-async function main() {
-  const request = await readRequestFromStdin();
-  const wsUrl = String(request.url || DEFAULT_WS_URL).trim() || DEFAULT_WS_URL;
-  const headers = buildHeaders(request);
-  const payload = buildPayload(request);
-
-  if (!payload.model) {
-    throw new Error("Missing ChatGPT OAuth websocket model.");
-  }
-  if (!headers.Authorization || headers.Authorization === "Bearer") {
-    throw new Error("Missing ChatGPT OAuth access token.");
-  }
-
-  const ws = new WebSocket(wsUrl, {
-    headers,
-    handshakeTimeout: 30_000,
+function buildConnectionKey(request) {
+  const originator = sanitizeHeaderValue(request.originator || DEFAULT_ORIGINATOR);
+  const version = sanitizeHeaderValue(request.version || "1.0.0");
+  return JSON.stringify({
+    url: String(request.url || DEFAULT_WS_URL).trim() || DEFAULT_WS_URL,
+    accessToken: sanitizeHeaderValue(request.access_token || ""),
+    originator,
+    version,
+    userAgent: sanitizeHeaderValue(request.user_agent || DEFAULT_USER_AGENT),
+    sessionId: sanitizeHeaderValue(request.session_id || ""),
+    accountId: sanitizeHeaderValue(request.account_id || ""),
+    betaHeader: request.beta_header !== false &&
+      process.env.OPEN_COMPANION_RESPONSES_WS_BETA_HEADER !== "0",
+    betaHeaderValue: sanitizeHeaderValue(
+      request.beta_header_value ||
+      process.env.OPEN_COMPANION_RESPONSES_WS_BETA_HEADER ||
+      DEFAULT_RESPONSES_WEBSOCKETS_BETA
+    ),
   });
+}
 
-  let finalized = false;
+function isTerminalEvent(event) {
+  return TERMINAL_EVENT_TYPES.has(String(event && event.type ? event.type : ""));
+}
 
-  const finalize = (code) => {
-    if (finalized) {
+class ResponsesWebSocketBridge {
+  constructor() {
+    this.ws = null;
+    this.connectionKey = "";
+    this.inFlight = null;
+    this.closed = false;
+  }
+
+  async close() {
+    this.closed = true;
+    const ws = this.ws;
+    this.ws = null;
+    this.connectionKey = "";
+    if (ws) {
+      try {
+        ws.removeAllListeners("message");
+        ws.removeAllListeners("error");
+        ws.removeAllListeners("close");
+        ws.close();
+      } catch {
+        // Ignore cleanup failures during shutdown.
+      }
+    }
+  }
+
+  async ensureConnected(request) {
+    const nextKey = buildConnectionKey(request);
+    if (
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN &&
+      this.connectionKey === nextKey
+    ) {
       return;
     }
-    finalized = true;
-    try {
-      ws.close();
-    } catch {
-      // Ignore cleanup failures during shutdown.
+
+    await this.close();
+    this.closed = false;
+
+    const wsUrl = String(request.url || DEFAULT_WS_URL).trim() || DEFAULT_WS_URL;
+    const headers = buildHeaders(request);
+
+    if (!sanitizeHeaderValue(request.access_token || "")) {
+      throw new Error("Missing ChatGPT OAuth access token.");
     }
-    setTimeout(() => {
-      process.exit(code);
-    }, 10);
-  };
 
-  ws.on("open", () => {
-    ws.send(JSON.stringify(payload));
-  });
+    this.ws = await new Promise((resolve, reject) => {
+      const ws = new WebSocket(wsUrl, {
+        headers,
+        handshakeTimeout: 30_000,
+      });
 
-  ws.on("message", (data) => {
+      const cleanup = () => {
+        ws.removeListener("open", onOpen);
+        ws.removeListener("error", onError);
+        ws.removeListener("unexpected-response", onUnexpectedResponse);
+      };
+      const onOpen = () => {
+        cleanup();
+        resolve(ws);
+      };
+      const onError = (error) => {
+        cleanup();
+        reject(error);
+      };
+      const onUnexpectedResponse = (_request, response) => {
+        cleanup();
+        const statusCode = response && response.statusCode ? response.statusCode : "unknown";
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          const detail = body.trim() ? `: ${body.trim().slice(0, 500)}` : "";
+          const error = new Error(`Unexpected server response: ${statusCode}${detail}`);
+          error.statusCode = Number(statusCode) || 0;
+          error.body = body;
+          reject(error);
+        });
+        response.on("error", (error) => {
+          reject(error);
+        });
+      };
+
+      ws.once("open", onOpen);
+      ws.once("error", onError);
+      ws.once("unexpected-response", onUnexpectedResponse);
+    });
+
+    this.connectionKey = nextKey;
+    this.ws.on("message", (data) => this.handleMessage(data));
+    this.ws.on("error", (error) => this.handleSocketError(error));
+    this.ws.on("close", (code, reasonBuffer) => this.handleClose(code, reasonBuffer));
+  }
+
+  handleMessage(data) {
     let text = "";
     if (typeof data === "string") {
       text = data;
@@ -139,45 +242,132 @@ async function main() {
     try {
       event = JSON.parse(text);
     } catch (error) {
-      writeSseEvent({
-        type: "error",
-        message: `Invalid websocket payload: ${String(error.message || error)}`,
-      });
-      finalize(1);
+      this.writeTurnError(`Invalid websocket payload: ${String(error.message || error)}`);
       return;
     }
 
     writeSseEvent(event);
 
-    if (
-      event.type === "response.completed" ||
-      event.type === "response.failed" ||
-      event.type === "error"
-    ) {
-      finalize(event.type === "response.completed" ? 0 : 1);
+    if (isTerminalEvent(event)) {
+      writeSseDone();
+      this.finishTurn();
     }
-  });
+  }
 
-  ws.on("error", (error) => {
-    writeSseEvent({
-      type: "error",
-      message: String(error && error.message ? error.message : error),
-    });
-    finalize(1);
-  });
+  handleSocketError(error) {
+    this.writeTurnError(String(error && error.message ? error.message : error));
+    this.resetConnection();
+  }
 
-  ws.on("close", (code, reasonBuffer) => {
-    if (finalized) {
+  handleClose(code, reasonBuffer) {
+    if (this.closed) {
       return;
     }
     const reason = Buffer.isBuffer(reasonBuffer) ? reasonBuffer.toString("utf8") : String(reasonBuffer || "");
+    this.writeTurnError(`WebSocket closed before completion (code=${code}, reason=${reason || "unknown"})`, code);
+    this.resetConnection();
+  }
+
+  resetConnection() {
+    const ws = this.ws;
+    this.ws = null;
+    this.connectionKey = "";
+    if (ws) {
+      try {
+        ws.removeAllListeners("message");
+        ws.removeAllListeners("error");
+        ws.removeAllListeners("close");
+        ws.close();
+      } catch {
+        // Ignore cleanup failures during reset.
+      }
+    }
+  }
+
+  writeTurnError(message, code) {
+    if (!this.inFlight) {
+      return;
+    }
     writeSseEvent({
       type: "error",
       code,
-      message: `WebSocket closed before completion (code=${code}, reason=${reason || "unknown"})`,
+      message,
     });
-    finalize(1);
+    writeSseDone();
+    this.finishTurn();
+  }
+
+  finishTurn() {
+    const current = this.inFlight;
+    this.inFlight = null;
+    if (current) {
+      current.resolve();
+    }
+  }
+
+  async handleRequest(request) {
+    if (request && request.type === "bridge.close") {
+      await this.close();
+      return;
+    }
+
+    const payload = buildPayload(request || {});
+    if (!payload.model) {
+      throw new Error("Missing ChatGPT OAuth websocket model.");
+    }
+
+    await this.ensureConnected(request || {});
+
+    await new Promise((resolve) => {
+      this.inFlight = { resolve };
+      this.ws.send(JSON.stringify(payload), (error) => {
+        if (error) {
+          this.writeTurnError(String(error && error.message ? error.message : error));
+          this.resetConnection();
+        }
+      });
+    });
+  }
+}
+
+async function main() {
+  const bridge = new ResponsesWebSocketBridge();
+  const rl = readline.createInterface({
+    input: process.stdin,
+    crlfDelay: Infinity,
   });
+
+  for await (const line of rl) {
+    const clean = String(line || "").trim();
+    if (!clean) {
+      continue;
+    }
+    let request;
+    try {
+      request = JSON.parse(clean);
+    } catch (error) {
+      writeSseEvent({
+        type: "error",
+        message: `Invalid bridge request: ${String(error.message || error)}`,
+      });
+      writeSseDone();
+      continue;
+    }
+
+    try {
+      await bridge.handleRequest(request);
+    } catch (error) {
+      writeSseEvent({
+        type: "error",
+        status: error && error.statusCode ? error.statusCode : undefined,
+        message: String(error && error.message ? error.message : error),
+      });
+      writeSseDone();
+      bridge.resetConnection();
+    }
+  }
+
+  await bridge.close();
 }
 
 if (require.main === module) {
@@ -192,7 +382,16 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_WS_URL,
+  DEFAULT_ORIGINATOR,
+  DEFAULT_RESPONSES_WEBSOCKETS_BETA,
+  DONE_SENTINEL,
+  TERMINAL_EVENT_TYPES,
+  ResponsesWebSocketBridge,
   buildHeaders,
+  buildConnectionKey,
   buildPayload,
+  isTerminalEvent,
+  readRequestFromStdin,
   sanitizeHeaderValue,
+  writeSseDone,
 };

@@ -47,6 +47,7 @@ app/tests/.tmp-test-profiles/
 app/tests/companion/.tmp-profiles/
 app/tests/companion/.artifacts/
 app/tests/integration/.tmp/
+app/tests/integration/.tmp-*/
 app/tests/integration/.tmp-memory/
 app/tests/test-results*/
 app/tests/old/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from typing import Any
 from urllib import error as urllib_error
@@ -30,6 +31,7 @@ from .openai import OpenAICompatibleBrainProvider, _translate_openai_error
 
 logger = logging.getLogger(__name__)
 DEFAULT_ACTIVE_KEEPALIVE = "10m"
+VERBOSE_RUNTIME_LOGS = os.environ.get("OPEN_COMPANION_VERBOSE_RUNTIME_LOGS") == "1"
 
 
 def _extract_ollama_content_parts(content: Any) -> tuple[str, list[str]]:
@@ -312,15 +314,16 @@ class GemmaProvider(OllamaCompatibleMixin, OpenAICompatibleBrainProvider):
             options["num_ctx"] = resolved_num_ctx
         options.setdefault("temperature", temperature)
         options.setdefault("num_predict", max_tokens)
-        print(
-            "[CTX ADVISOR] "
-            f"layer={self.layer_name} "
-            f"vram_free={int(max(0, free_vram_bytes) / (1024 * 1024))}MB "
-            f"ram_free={int(max(0, free_ram_bytes) / (1024 * 1024))}MB "
-            f"num_ctx={options.get('num_ctx', 'n/a')}",
-            file=sys.stderr,
-            flush=True,
-        )
+        if VERBOSE_RUNTIME_LOGS:
+            print(
+                "[CTX ADVISOR] "
+                f"layer={self.layer_name} "
+                f"vram_free={int(max(0, free_vram_bytes) / (1024 * 1024))}MB "
+                f"ram_free={int(max(0, free_ram_bytes) / (1024 * 1024))}MB "
+                f"num_ctx={options.get('num_ctx', 'n/a')}",
+                file=sys.stderr,
+                flush=True,
+            )
         message_payloads = self._build_native_messages(messages, system)
         attempt_options = dict(options)
         attempted_num_ctx: set[int] = set()
@@ -336,22 +339,23 @@ class GemmaProvider(OllamaCompatibleMixin, OpenAICompatibleBrainProvider):
             if tools:
                 payload["tools"] = tools
 
-            print(
-                "[OLLAMA REQUEST] "
-                f"layer={self.layer_name} "
-                f"family={self.model_family!r} "
-                f"model={model!r} "
-                f"endpoint={self.native_base_url + '/api/chat'!r} "
-                f"stream={bool(stream)} "
-                f"messages={len(payload['messages'])} "
-                f"tools={len(tools or [])} "
-                f"num_ctx={attempt_options.get('num_ctx', 'n/a')} "
-                f"temperature={attempt_options.get('temperature', 'n/a')} "
-                f"top_p={attempt_options.get('top_p', 'n/a')} "
-                f"top_k={attempt_options.get('top_k', 'n/a')}",
-                file=sys.stderr,
-                flush=True,
-            )
+            if VERBOSE_RUNTIME_LOGS:
+                print(
+                    "[OLLAMA REQUEST] "
+                    f"layer={self.layer_name} "
+                    f"family={self.model_family!r} "
+                    f"model={model!r} "
+                    f"endpoint={self.native_base_url + '/api/chat'!r} "
+                    f"stream={bool(stream)} "
+                    f"messages={len(payload['messages'])} "
+                    f"tools={len(tools or [])} "
+                    f"num_ctx={attempt_options.get('num_ctx', 'n/a')} "
+                    f"temperature={attempt_options.get('temperature', 'n/a')} "
+                    f"top_p={attempt_options.get('top_p', 'n/a')} "
+                    f"top_k={attempt_options.get('top_k', 'n/a')}",
+                    file=sys.stderr,
+                    flush=True,
+                )
             logger.info(
                 "ollama native request layer=%s family=%s model=%s endpoint=%s stream=%s messages=%s tools=%s num_ctx=%s top_p=%s top_k=%s temperature=%s",
                 self.layer_name,
@@ -524,16 +528,17 @@ class GemmaProvider(OllamaCompatibleMixin, OpenAICompatibleBrainProvider):
             if DEBUG_ENABLED:
                 debug_log("PROMPT_SENT", json.dumps(compat_payload, ensure_ascii=False))
             debug_tool_schema("PROVIDER_REQUEST_BODY", {"provider": self.provider_name, "api": "ollama_compat_chat", "body": compat_payload})
-            print(
-                "[OLLAMA REQUEST] "
-                f"layer={self.layer_name} "
-                f"family={self.model_family!r} "
-                f"model={resolved_model!r} "
-                f"endpoint={self.base_url!r} "
-                "mode='compat'",
-                file=sys.stderr,
-                flush=True,
-            )
+            if VERBOSE_RUNTIME_LOGS:
+                print(
+                    "[OLLAMA REQUEST] "
+                    f"layer={self.layer_name} "
+                    f"family={self.model_family!r} "
+                    f"model={resolved_model!r} "
+                    f"endpoint={self.base_url!r} "
+                    "mode='compat'",
+                    file=sys.stderr,
+                    flush=True,
+                )
             logger.info(
                 "ollama compatibility request layer=%s family=%s model=%s endpoint=%s",
                 self.layer_name,

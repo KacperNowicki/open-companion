@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 
 from model_family import strip_gemma_thinking, strip_gemma_thought_blocks, strip_legacy_think_blocks
 from runtime_paths import SOUL_ACTIVE_DIR, SOUL_DEFAULTS_DIR
+
+VERBOSE_RUNTIME_LOGS = os.environ.get("OPEN_COMPANION_VERBOSE_RUNTIME_LOGS") == "1"
 
 
 def sanitize_text_for_utf8(value: str) -> str:
@@ -190,6 +193,8 @@ def summarize_terminal_content(content) -> str:
 
 
 def log_terminal_message(direction: str, layer_name: str, message: dict) -> None:
+    if not VERBOSE_RUNTIME_LOGS:
+        return
     if not isinstance(message, dict):
         return
     role = str(message.get("role") or "unknown")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+from collections.abc import Iterator
 from pathlib import Path, PureWindowsPath
 
 try:
@@ -109,6 +110,28 @@ def _atomic_write_text(path: Path, content: str) -> None:
     temp_path = path.with_name(f".{path.name}.tmp")
     temp_path.write_text(content, encoding="utf-8")
     temp_path.replace(path)
+
+
+def _iter_visible_paths(root: Path, *, recursive: bool) -> Iterator[Path]:
+    try:
+        children = sorted(root.iterdir(), key=lambda p: p.as_posix().lower())
+    except OSError:
+        return
+    for child in children:
+        if child.name.startswith("."):
+            continue
+        yield child
+        if recursive and child.is_dir():
+            yield from _iter_visible_paths(child, recursive=True)
+
+
+def _iter_search_files(root: Path) -> Iterator[Path]:
+    if root.is_file():
+        yield root
+        return
+    for item in _iter_visible_paths(root, recursive=True):
+        if item.is_file():
+            yield item
 
 
 def read_file(path: str, start_line: int | None = None, end_line: int | None = None) -> str:
@@ -227,11 +250,8 @@ def list_files(path: str = "", recursive: bool = False, max_results: int = MAX_L
     except Exception:
         limit = MAX_LIST_RESULTS
     vault_root = Path(VAULT_DIR).resolve()
-    iterator = resolved.rglob("*") if recursive else resolved.iterdir()
     entries: list[str] = []
-    for item in sorted(iterator, key=lambda p: p.as_posix().lower()):
-        if item.name.startswith("."):
-            continue
+    for item in _iter_visible_paths(resolved, recursive=bool(recursive)):
         if item.is_dir() and not include_dirs:
             continue
         rel = item.resolve().relative_to(vault_root).as_posix()
@@ -259,23 +279,24 @@ def search_files(query: str, path: str = "", max_results: int = MAX_SEARCH_RESUL
     except Exception:
         limit = MAX_SEARCH_RESULTS
     vault_root = Path(VAULT_DIR).resolve()
-    files = [root] if root.is_file() else [p for p in root.rglob("*") if p.is_file()]
     results: list[str] = []
-    for file_path in sorted(files, key=lambda p: p.as_posix().lower()):
+    needle_lower = needle.lower()
+    for file_path in _iter_search_files(root):
         rel = file_path.resolve().relative_to(vault_root).as_posix()
         if file_path.name.startswith(".") or not fnmatch.fnmatch(rel, str(file_glob or "*")):
             continue
         try:
             if _is_binary_file(file_path):
                 continue
-            text = file_path.read_text(encoding="utf-8")
+            with file_path.open("r", encoding="utf-8") as handle:
+                for line_no, raw_line in enumerate(handle, start=1):
+                    line = raw_line.rstrip("\r\n")
+                    if needle_lower in line.lower():
+                        results.append(f"{rel}:{line_no}: {line}")
+                        if len(results) >= limit:
+                            return "\n".join(results) + "\n[Truncated]"
         except Exception:
             continue
-        for line_no, line in enumerate(text.splitlines(), start=1):
-            if needle.lower() in line.lower():
-                results.append(f"{rel}:{line_no}: {line}")
-                if len(results) >= limit:
-                    return "\n".join(results) + "\n[Truncated]"
     return "\n".join(results) if results else "[No matches]"
 
 

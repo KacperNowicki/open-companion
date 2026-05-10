@@ -54,6 +54,24 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _load_root_config() -> dict:
+    config_path = ROOT / "config.json"
+    if config_path.exists():
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    return {
+        "brain": {"provider": "gemma", "model": "qwen2.5:14b"},
+        "memory": {
+            "enabled": True,
+            "embedding_enabled": True,
+            "embedding_model": "nomic-embed-text",
+            "extraction_source": "local",
+            "extraction_model": "gemma4:e4b",
+        },
+        "heartbeat": {"enabled": False},
+        "voice": {"tts_enabled": False, "stt_enabled": False},
+    }
+
+
 def _clear_backend_modules() -> None:
     for base in MODULE_BASENAMES:
         sys.modules.pop(base, None)
@@ -67,7 +85,7 @@ def _load_modules() -> dict[str, object]:
 
 
 def _base_config() -> dict:
-    config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    config = _load_root_config()
     config.setdefault("brain", {})["provider"] = "gemma"
     config["brain"]["model"] = "qwen2.5:14b"
     config.setdefault("memory", {})["enabled"] = True
@@ -195,6 +213,46 @@ def test_memory_retrieval_prefers_relevant_entries() -> None:
     ok(name)
 
 
+def test_memory_embedding_cache_persists_between_loads() -> None:
+    name = "memory: embedding cache persists between loads"
+
+    class FakeEmbeddingResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"embedding": [0.25, 1, 0]}).encode("utf-8")
+
+    with isolated_profile() as (_profile, _config, modules):
+        memory = modules["memory"]
+        calls = []
+
+        def fake_urlopen(request, timeout=10):
+            calls.append((request, timeout))
+            return FakeEmbeddingResponse()
+
+        with mock.patch.object(memory.urllib.request, "urlopen", side_effect=fake_urlopen):
+            first = memory._get_embedding("The user loves coffee.", "fake-embed")
+            memory._save_embedding_cache_if_dirty()
+            assert first == [0.25, 1.0, 0.0], first
+            assert memory._EMBEDDING_CACHE_PATH.exists()
+
+            memory._embedding_cache.clear()
+            memory._embedding_cache_loaded = False
+            memory._embedding_cache_dirty = False
+
+            second = memory._get_embedding("The user loves coffee.", "fake-embed")
+
+        cache_text = memory._EMBEDDING_CACHE_PATH.read_text(encoding="utf-8")
+        assert second == first, second
+        assert len(calls) == 1, calls
+        assert "coffee" not in cache_text.lower(), cache_text
+    ok(name)
+
+
 def test_memory_deduplicates_semantic_variants() -> None:
     name = "memory: append_memory deduplicates semantic favorite-color variants"
     with isolated_profile() as (_profile, _config, modules):
@@ -264,6 +322,7 @@ def run_all() -> bool:
     tests = [
         test_memory_write_persists_to_memory_file,
         test_memory_retrieval_prefers_relevant_entries,
+        test_memory_embedding_cache_persists_between_loads,
         test_memory_deduplicates_semantic_variants,
         test_dream_consolidation_and_lockfile,
         test_reset_and_import_survival,

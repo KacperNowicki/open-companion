@@ -3330,6 +3330,11 @@ async function refreshChatGPTOAuthStatus() {
 
   try {
     const status = await window.ocSettings.oauth.chatgpt.status();
+    const errEl = $("chatgpt-oauth-error");
+    if (errEl) {
+      errEl.style.display = "none";
+      errEl.textContent = "";
+    }
     if (status.connected) {
       disconnected.style.display = "none";
       connected.style.display = "";
@@ -3349,6 +3354,13 @@ async function refreshChatGPTOAuthStatus() {
     } else {
       disconnected.style.display = "";
       connected.style.display = "none";
+      if (status.reconnectRequired && errEl) {
+        const scopes = Array.isArray(status.missingScopes) && status.missingScopes.length
+          ? ` Missing permission: ${status.missingScopes.join(", ")}.`
+          : "";
+        errEl.textContent = `Reconnect your ChatGPT account to enable the ChatGPT Codex transport.${scopes}`;
+        errEl.style.display = "";
+      }
     }
   } catch {
     disconnected.style.display = "";

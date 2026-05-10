@@ -81,8 +81,43 @@ def _load_modules() -> dict[str, object]:
     }
 
 
+def _load_root_config() -> dict:
+    config_path = ROOT / "config.json"
+    if config_path.exists():
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    return {
+        "brain": {
+            "provider": "gemma",
+            "model": "qwen2.5:14b",
+            "layers": {
+                "companion": {"provider": "", "model": ""},
+                "assistant": {"provider": "", "model": ""},
+            },
+        },
+        "memory": {
+            "enabled": True,
+            "embedding_enabled": False,
+            "write_back_enabled": False,
+        },
+        "heartbeat": {"enabled": False},
+        "voice": {"tts_enabled": False, "stt_enabled": False},
+        "context": {},
+        "layers": {
+            "companion": {"enabled": True, "permission_profile": "companion"},
+            "assistant": {"enabled": True, "permission_profile": "assistant"},
+        },
+        "tools": {
+            "overrides": {
+                "companion": {},
+                "assistant": {},
+            },
+            "custom": [],
+        },
+    }
+
+
 def _base_config() -> dict:
-    config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    config = _load_root_config()
     config.setdefault("brain", {})["provider"] = "gemma"
     config["brain"]["model"] = "qwen2.5:14b"
     config.setdefault("brain", {}).setdefault("layers", {})
