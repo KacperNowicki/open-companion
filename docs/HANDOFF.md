@@ -31,6 +31,10 @@ Use `docs/ARCHITECTURE.md` for durable runtime/config/safety decisions. Use this
 - Keep `signAndEditExecutable: false` unless the Windows build environment can extract `winCodeSign`; the default electron-builder resource-edit path failed on this machine because the current user cannot create the symlinks in the `winCodeSign` package.
 - Public support wording should use optional support/tip/supporter-token language, not donation/charity language.
 - Runtime performance pass is in place: conversation trimming is linear, noisy per-turn stderr logging is opt-in via `OPEN_COMPANION_VERBOSE_RUNTIME_LOGS=1`, vault list/search stream through files, memory embeddings persist in a bounded sidecar cache, scheduler reminder parsing is mtime/size cached, Electron Ollama metadata calls share a short-lived cache, Python user-site probing is cached per Python command, and Settings can prewarm in a hidden reusable window after overlay startup.
+- Companion startup warmup is non-blocking for real user turns. A user turn cancels the background warmup signal immediately, memory retrieval preload exits at cancellation checkpoints, and the companion model warmup skips its tiny model poke once user activity begins.
+- Dependency installs now use lockfiles and a 28-day supply-chain quarantine. Use `npm run install:locked` for `npm ci` plus hashed Python installs from `requirements.lock`; `npm test` and `npm run test:all` run the dependency-age unit test and live npm/PyPI lockfile age check before the rest of the suite.
+- The project-level `.npmrc` is intentional and should be committed: it enables npm audit at moderate severity, requires package-lock use, disables funding noise, and saves future npm dependency changes as exact versions. Top-level npm dependencies in `package.json` are exact-pinned to the currently vetted lockfile versions.
+- `config/dependency-age-exceptions.json` currently contains a temporary security exception for `@xmldom/xmldom@0.9.10` expiring on 2026-05-17. The exception exists because older age-compliant releases are deprecated for critical issues; after expiry, the checker warns that the exception is stale and the locked version is old enough to pass without it.
 - The overlay scene now shows an in-scene loading veil while the TalkingHead avatar initializes, then reveals the avatar after the readiness promise resolves and a paint tick completes. Load failures keep a compact unavailable state visible instead of leaving a blank scene.
 - Public-clone integration fixtures no longer require an ignored root `config.json`; memory, file-tool, and context-lifecycle tests seed a minimal config when needed.
 - ChatGPT OAuth credentials are now profile-scoped in the OS keychain through `OPEN_COMPANION_CHATGPT_OAUTH_KEYCHAIN_SERVICE`, and both Electron and direct Python default the base keychain service to `open-companion`. The app no longer treats legacy global `OpenCompanion` OAuth tokens as an active login for a different worktree, while disconnect still clears current and legacy OAuth slots. Backend refresh uses the same form-encoded token grant as login and stores only access/refresh/expires/account-id values.
@@ -40,7 +44,32 @@ Use `docs/ARCHITECTURE.md` for durable runtime/config/safety decisions. Use this
 
 ## Verification
 
-Latest verification on 2026-05-10:
+Latest focused verification on 2026-05-15:
+
+```bash
+python -m py_compile app/backend/wrapper.py app/backend/memory.py app/tests/integration/test_layers.py app/tests/integration/test_memory.py
+python app/tests/integration/test_layers.py
+python app/tests/integration/test_memory.py
+node --check app/scripts/check-dependency-age.js
+node --check app/tests/dependency-age.test.js
+node app/tests/dependency-age.test.js
+npm run test:dependency-age
+npm run test:dependency-age -- --npm-only
+npm run test:dependency-age -- --pypi-only
+node app/scripts/check-dependency-age.js --npm-only --now 2026-05-18T00:00:00.000Z
+npm config list --location=project
+npm install --package-lock-only --ignore-scripts
+node -e "<top-level npm package.json specs are exact and match package-lock>"
+npm ci --ignore-scripts
+node node_modules/electron/install.js
+python -m pip install --dry-run --require-hashes -r requirements.lock
+npm test
+git diff --check
+```
+
+All commands passed. `npm ci --ignore-scripts` intentionally skipped Electron's postinstall, so `node node_modules/electron/install.js` was run before `npm test`. `git diff --check` emitted only line-ending normalization warnings. npm audit output currently reports 3 moderate vulnerabilities after the secure XML override; do not run `npm audit fix` automatically because it can pull dependency updates that are still inside the 28-day quarantine.
+
+Previous broad verification on 2026-05-10:
 
 ```bash
 python -m py_compile app/backend/memory.py app/backend/scheduler.py app/backend/tools/builtin/files.py app/backend/wrapper.py app/backend/wrapper_text.py app/backend/providers/gemma.py app/tests/integration/test_memory.py app/tests/integration/test_scheduler_realistic.py

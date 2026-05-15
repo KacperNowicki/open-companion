@@ -710,14 +710,19 @@ def _get_embedding(text: str, model: str) -> list[float] | None:
         return None
 
 
-def preload_retrieval_runtime(config: dict) -> None:
+def preload_retrieval_runtime(config: dict, cancel_event: threading.Event | None = None) -> None:
     """Warm the embedding model and cache current memory-entry vectors in background."""
     global _retrieval_preload_started, _retrieval_preload_completed
+
+    def cancelled() -> bool:
+        return bool(cancel_event and cancel_event.is_set())
 
     memory_cfg = config.get("memory", {}) if isinstance(config, dict) else {}
     if not memory_cfg.get("enabled", True):
         return
     if memory_cfg.get("embedding_enabled", True) is False:
+        return
+    if cancelled():
         return
 
     with _retrieval_preload_lock:
@@ -728,8 +733,12 @@ def preload_retrieval_runtime(config: dict) -> None:
 
     embedding_model = str(memory_cfg.get("embedding_model", "nomic-embed-text") or "nomic-embed-text").strip()
     try:
+        if cancelled():
+            return
         _get_embedding("memory warmup", embedding_model)
         for _, entry_text in _collect_all_entries():
+            if cancelled():
+                return
             _get_embedding(strip_memory_timestamp(entry_text), embedding_model)
         _retrieval_preload_completed = True
     except Exception:

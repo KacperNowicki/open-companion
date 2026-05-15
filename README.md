@@ -47,12 +47,13 @@ Some runtime assets, such as Kokoro and Whisper assets, are downloaded or prepar
 ## Quick Start
 
 ```bash
-npm install
-python -m pip install -r requirements.txt
+npm run install:locked
 npm start
 ```
 
 The app starts the Electron shell. On first launch, the setup wizard helps configure the local or cloud brain provider, memory mode, and voice.
+
+For supply-chain safety, installs should use the checked-in lockfiles: `npm ci` for Node and `python -m pip install --require-hashes -r requirements.lock` for Python. The committed `.npmrc` keeps npm audit on, requires package-lock use, and saves future npm dependencies as exact versions. New dependency versions must be at least 28 days old before they are accepted.
 
 ## Configuration
 
@@ -78,6 +79,7 @@ Keep private overrides, API keys, generated runtime assets, memories, vault cont
 
 ```bash
 npm test
+npm run test:dependency-age
 npm run test:settings-ui
 npm run generate-notices
 npm run generate-voices
@@ -110,6 +112,8 @@ OpenCompanion is intended to be local-first:
 - API keys should live in the OS keychain or local ignored config, never in committed files.
 - Runtime memories, vault content, generated caches, test artifacts, downloaded models, and profile state are ignored.
 - Host/system actions should stay explicit and approval-gated where appropriate.
+- Dependency updates must pass the 28-day age quarantine in `npm run test:dependency-age`.
+- Do not run `npm audit fix` automatically; review the resulting lockfile with the age checker first.
 
 Do not commit private conversations, local profile data, API keys, generated runtime assets, machine-specific paths, logs, downloaded models, memory, vault contents, or active soul data.
 

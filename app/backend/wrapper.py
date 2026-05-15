@@ -1035,6 +1035,7 @@ class LayeredRuntime:
         memory.init_memory()
         _ensure_schedule_file()
         self._companion_warmup_thread: threading.Thread | None = None
+        self._companion_warmup_cancel = threading.Event()
 
         self.companion_session = LayerSession(self.config, "companion", include_memory=True)
         self.companion_name = self.companion_session.display_name
@@ -1105,9 +1106,13 @@ class LayeredRuntime:
 
         def _worker() -> None:
             try:
-                memory.preload_retrieval_runtime(config_snapshot)
+                memory.preload_retrieval_runtime(config_snapshot, cancel_event=self._companion_warmup_cancel)
             except Exception:
                 logger.exception("Memory preload failed")
+
+            if self._companion_warmup_cancel.is_set():
+                logger.debug("Skipping companion model warmup because a user turn has started.")
+                return
 
             try:
                 provider_name = brain.get_layer_brain_config(config_snapshot, "companion").get("provider")
@@ -1124,6 +1129,11 @@ class LayeredRuntime:
                 logger.debug("Companion brain warmup failed", exc_info=True)
 
         self._companion_warmup_thread = self._launch_background_task("companion-warmup", _worker)
+
+    def _cancel_companion_warmup_for_user_turn(self) -> None:
+        thread = self._companion_warmup_thread
+        if thread and thread.is_alive():
+            self._companion_warmup_cancel.set()
 
     def set_bridge_emitter(self, emit_func) -> None:
         self._bridge_emit = emit_func
@@ -1348,16 +1358,10 @@ class LayeredRuntime:
             logger.warning("Session compaction failed for %s; keeping raw history.", session.layer_name, exc_info=True)
         return session._drain_side_events() + self._finish_worker_session(session, event)
 
-    def _await_companion_warmup(self, timeout: float = 60.0) -> None:
-        thread = self._companion_warmup_thread
-        if not thread or not thread.is_alive():
-            return
-        thread.join(timeout=timeout)
-
     def submit_user_message(self, user_input: str, image_base64: str | None = None) -> list[dict]:
         if self._busy():
             raise RuntimeError("Cannot accept a new message while layered work is still in progress.")
-        self._await_companion_warmup()
+        self._cancel_companion_warmup_for_user_turn()
         if VERBOSE_RUNTIME_LOGS:
             print(f"[USER] {_quote_terminal_text(user_input)}", file=sys.stderr, flush=True)
         tool_config = self._refresh_config()
@@ -1376,6 +1380,7 @@ class LayeredRuntime:
     def invoke_layer(self, layer_name: str, content: str, image_base64: str | None = None) -> list[dict]:
         if self._busy():
             raise RuntimeError("Cannot invoke another layer while work is already in progress.")
+        self._cancel_companion_warmup_for_user_turn()
         canonical = brain.normalize_layer_name(layer_name)
         if canonical == "companion":
             return self.submit_user_message(content, image_base64=image_base64)

@@ -15,36 +15,61 @@
         "generate-voices:force": "node app/scripts/generate-voices.js --force",
         "generate-notices": "node app/scripts/generate-node-license-notice.js",
         "capture-readme-gif": "node app/scripts/capture-readme-gif.js",
+        "install:locked": "npm ci && python -m pip install --require-hashes -r requirements.lock",
         "build:backend:win": "node app/scripts/build-backend.js",
         "build:voice-previews": "node app/scripts/generate-voices.js",
         "pack:win:clean": "npm run clean:artifacts && node app/scripts/build-windows.js --dir --publish never",
         "pack:win": "node app/scripts/build-windows.js --dir --publish never",
         "dist:win:clean": "npm run clean:artifacts && node app/scripts/build-windows.js --publish onTagOrDraft",
         "dist:win": "node app/scripts/build-windows.js --publish onTagOrDraft",
-        "test": "node app/tests/config.test.js && node app/tests/test_migration.js && python app/tests/test_config.py",
+        "test": "node app/tests/dependency-age.test.js && node app/scripts/check-dependency-age.js && node app/tests/config.test.js && node app/tests/test_migration.js && python app/tests/test_config.py",
+        "test:dependency-age": "node app/scripts/check-dependency-age.js",
+        "test:dependency-age:unit": "node app/tests/dependency-age.test.js",
         "test:config": "node app/tests/config.test.js",
         "test:config:py": "python app/tests/test_config.py",
         "test:e2e": "python app/tests/test_suite.py",
         "test:updater": "node app/tests/test_updater_smoke.js",
         "test:settings-ui": "playwright test --config app/tests/playwright.config.js app/tests/ui/settings-ui.spec.js",
         "test:scene": "playwright test --config app/tests/playwright.config.js app/tests/ui/scene-controls.spec.js",
-        "test:all": "node app/tests/config.test.js && node app/tests/test_migration.js && python app/tests/test_config.py && python app/tests/test_suite.py",
+        "test:all": "node app/tests/dependency-age.test.js && node app/scripts/check-dependency-age.js && node app/tests/config.test.js && node app/tests/test_migration.js && python app/tests/test_config.py && python app/tests/test_suite.py",
         "test:integration": "node app/tests/integration/run.js",
         "test:companion": "python app/tests/companion/run.py",
         "test:full": "npm run test:all && npm run test:integration && npm run test:companion"
     },
     "dependencies": {
-        "@met4citizen/talkinghead": "^1.7.0",
-        "electron-updater": "^6.6.2",
-        "keytar": "^7.9.0",
-        "three": "^0.180.0",
-        "ws": "^8.20.0"
+        "@met4citizen/talkinghead": "1.7.0",
+        "electron-updater": "6.8.3",
+        "keytar": "7.9.0",
+        "three": "0.180.0",
+        "ws": "8.20.0"
     },
     "devDependencies": {
-        "@playwright/test": "^1.54.2",
-        "electron": "^42.0.0",
-        "electron-builder": "^26.8.1",
-        "playwright": "^1.54.2"
+        "@playwright/test": "1.58.2",
+        "electron": "41.2.1",
+        "electron-builder": "26.9.0",
+        "playwright": "1.58.2"
+    },
+    "overrides": {
+        "@electron/rebuild": "4.0.3",
+        "@electron/universal": {
+            "fs-extra": "11.3.4"
+        },
+        "@electron/windows-sign": {
+            "fs-extra": "11.3.4"
+        },
+        "@xmldom/xmldom": "0.9.10",
+        "ajv": "6.14.0",
+        "brace-expansion": "5.0.5",
+        "fs-extra": "11.3.4",
+        "hasown": "2.0.2",
+        "ip-address": "10.1.0",
+        "jiti": "2.6.1",
+        "jsonfile": "6.2.0",
+        "lru-cache": "11.3.5",
+        "node-abi": "4.28.0",
+        "node-gyp": "12.2.0",
+        "socks": "2.8.7",
+        "tar": "7.5.13"
     },
     "build": {
         "appId": "com.opencompanion.app",

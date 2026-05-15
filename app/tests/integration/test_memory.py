@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -266,6 +267,18 @@ def test_memory_deduplicates_semantic_variants() -> None:
     ok(name)
 
 
+def test_memory_preload_honors_cancel_event() -> None:
+    name = "memory: retrieval preload stops when cancelled"
+    with isolated_profile() as (_profile, config, modules):
+        memory = modules["memory"]
+        memory.append_memory("The user loves coffee.")
+        cancel_event = threading.Event()
+        cancel_event.set()
+        with mock.patch.object(memory, "_get_embedding", side_effect=AssertionError("embedding should not be called")):
+            memory.preload_retrieval_runtime(config, cancel_event=cancel_event)
+    ok(name)
+
+
 def test_dream_consolidation_and_lockfile() -> None:
     name = "memory: dream consolidation writes cleaned output and honors the lockfile"
     with isolated_profile() as (_profile, config, modules):
@@ -324,6 +337,7 @@ def run_all() -> bool:
         test_memory_retrieval_prefers_relevant_entries,
         test_memory_embedding_cache_persists_between_loads,
         test_memory_deduplicates_semantic_variants,
+        test_memory_preload_honors_cancel_event,
         test_dream_consolidation_and_lockfile,
         test_reset_and_import_survival,
     ]

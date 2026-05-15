@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import site
 import sys
+import threading
+import time
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
@@ -225,6 +227,31 @@ def test_invoke_layer_supports_direct_companion() -> None:
         close_runtime(runtime)
 
 
+def test_companion_turn_cancels_background_warmup_without_blocking() -> None:
+    runtime = build_runtime()
+    stop_warmup = threading.Event()
+    warmup_thread = threading.Thread(target=stop_warmup.wait, daemon=True)
+    warmup_thread.start()
+    runtime._companion_warmup_thread = warmup_thread
+    try:
+        with patch.object(
+            wrapper.LayerSession,
+            "submit_user_message",
+            autospec=True,
+            return_value={"type": "assistant_message", "content": "hi", "layer": "companion", "state": "idle"},
+        ):
+            started = time.monotonic()
+            events = runtime.submit_user_message("hello there")
+            elapsed = time.monotonic() - started
+        assert elapsed < 0.5, elapsed
+        assert runtime._companion_warmup_cancel.is_set()
+        assert events and events[-1]["content"] == "hi", events
+    finally:
+        stop_warmup.set()
+        warmup_thread.join(timeout=1)
+        close_runtime(runtime)
+
+
 def test_image_payload_is_dropped_for_text_only_model() -> None:
     session = build_session("assistant")
     try:
@@ -332,6 +359,7 @@ def main() -> None:
     run_test("direct assistant invoke returns without companion rewrite", test_direct_assistant_invoke_returns_without_companion_rewrite)
     run_test("invoke_layer normalizes legacy assistant aliases", test_invoke_layer_normalizes_legacy_assistant_aliases)
     run_test("invoke_layer supports direct companion sends", test_invoke_layer_supports_direct_companion)
+    run_test("companion turn cancels background warmup without blocking", test_companion_turn_cancels_background_warmup_without_blocking)
     run_test("image payload is dropped for text-only model", test_image_payload_is_dropped_for_text_only_model)
     run_test("image payload is kept for vision model", test_image_payload_is_kept_for_vision_model)
     run_test("companion tool definitions do not include layer handoffs", test_companion_tool_definitions_do_not_include_layer_handoffs)

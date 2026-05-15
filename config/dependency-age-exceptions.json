@@ -1,0 +1,11 @@
+{
+    "exceptions": [
+        {
+            "ecosystem": "npm",
+            "name": "@xmldom/xmldom",
+            "version": "0.9.10",
+            "expires": "2026-05-17",
+            "reason": "Security fix: older age-compliant @xmldom/xmldom releases are deprecated for critical issues; remove after this release crosses the 28-day quarantine."
+        }
+    ]
+}

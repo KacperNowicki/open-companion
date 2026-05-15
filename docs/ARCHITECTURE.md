@@ -61,6 +61,14 @@ Settings and onboarding preload scripts expose the same catalog for first paint.
 
 When a default changes in one side, check the other side before committing.
 
+## Dependency Supply Chain
+
+Dependency installs should be lockfile-based. Use `npm ci` for Node dependencies and `python -m pip install --require-hashes -r requirements.lock` for Python dependencies. The helper command `npm run install:locked` runs both.
+
+The project-level `.npmrc` is intentional supply-chain policy. It keeps npm audit enabled at moderate severity, requires `package-lock.json`, disables funding noise, and saves future npm dependencies as exact versions. Top-level npm dependencies in `package.json` should also stay exact-pinned to the vetted lockfile versions. Do not use `npm audit fix` blindly; it may pull newer dependency versions that are still inside quarantine or change transitive resolution in ways the age checker should review first.
+
+Locked npm and PyPI package versions must be at least 28 days old before they are accepted. `app/scripts/check-dependency-age.js` reads `package-lock.json` and `requirements.lock`, checks npm registry and PyPI release metadata, and fails `npm test` when a locked version is still inside that quarantine window. Temporary exceptions, if ever needed for a security emergency, belong in `config/dependency-age-exceptions.json` with an expiry and reason.
+
 ## Test Mode
 
 Electron and backend tests run with `OPEN_COMPANION_TEST_MODE=1`. In that mode, the reminder scheduler must stay disabled through both startup and config reloads unless a test explicitly opts in with `OPEN_COMPANION_TEST_ENABLE_SCHEDULER=1`. This keeps UI and capture profiles quiet and prevents stale local schedules from leaking into automated runs.
@@ -80,6 +88,7 @@ Runtime caches should be local, bounded, and easy to invalidate by normal file o
 - Electron Ollama metadata reads use `app/frontend/main/ollama-cache.js`, a short-lived main-process cache for `/api/tags`, `/api/ps`, and `/api/show` responses.
 - Electron Python subprocess setup caches the `python -m site --user-site` probe per Python command.
 - After the overlay is ready, Electron can prewarm Settings in a hidden reusable window so config/model/voice hydration is done before the user opens it. Disable with `OPEN_COMPANION_PREWARM_SETTINGS=0` or tune the delay with `OPEN_COMPANION_SETTINGS_PREWARM_DELAY_MS`.
+- Companion startup warmup is speculative background work and must not block user turns. The first real user turn sets a warmup cancellation event; memory retrieval preload checks that event before expensive work and between entry embeddings, and the companion model warmup skips its tiny model request once user activity has begun.
 
 Verbose per-turn backend request/result logging is disabled by default. Set `OPEN_COMPANION_VERBOSE_RUNTIME_LOGS=1` when debugging prompt, message, or Ollama payload flow. Exceptional warnings and keepalive/runtime status logs may still be emitted without that flag.
 

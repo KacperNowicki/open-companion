@@ -22,14 +22,15 @@ After meaningful changes:
 
 ## Start Here
 
-- Install JavaScript dependencies with `npm install`.
-- Install Python dependencies with `python -m pip install -r requirements.txt`.
+- Install dependencies from lockfiles with `npm run install:locked`.
+- If installing manually, use `npm ci` and `python -m pip install --require-hashes -r requirements.lock`.
 - Run the desktop app with `npm start`.
 - Run the backend directly with `python app/backend/wrapper.py` or `python app/backend/wrapper.py --json`.
 
 ## Common Tests
 
 - `npm test`
+- `npm run test:dependency-age`
 - `npm run test:settings-ui`
 - `npm run test:integration`
 - `python app/tests/test_suite.py`
@@ -61,6 +62,9 @@ Use narrower tests when possible, then document any broader verification in `doc
 ## Public Repo Hygiene
 
 - Do not commit secrets, logs, local profile state, downloaded models, generated binaries, memory, vault contents, or active soul data.
+- Do not accept dependency updates until every locked npm/PyPI version is at least 28 days old; `npm run test:dependency-age` enforces this quarantine.
+- Keep the committed `.npmrc` in place. It enables npm audit, requires package-lock use, and saves future npm dependencies as exact versions.
+- Do not run `npm audit fix` automatically; review the resulting lockfile and dependency age first.
 - Keep third-party asset and dependency licenses reflected in `THIRD_PARTY_NOTICES.md`.
 - Update relevant docs when runtime behavior, setup, tests, or public release packaging changes.
 - Keep public docs concise, current, and free of private session notes.
